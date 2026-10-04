@@ -69,6 +69,46 @@ namespace UKCity.City
             }
         }
 
+        /// <summary>Everything a signal head needs to light its lamps.</summary>
+        public struct HeadState
+        {
+            public Aspect Vehicle;
+            public bool PedGreen;
+            /// <summary>Another vehicle stage is running (used for filter arrows).</summary>
+            public bool OtherStageGreen;
+            /// <summary>Seconds until the green man (for the WAIT lamp); 0 while it shows.</summary>
+            public float UntilPed;
+        }
+
+        public HeadState State(int x, int y, int z, int facing, bool pedestrian)
+        {
+            var b = Bind(x, y, z, facing, pedestrian);
+            float t = Time + b.Offset;
+            var st = new HeadState();
+            switch (b.Kind)
+            {
+                case Ctl.Crossing:
+                    st.Vehicle = CrossingAspect(t);
+                    st.PedGreen = CrossingPedGreen(t);
+                    st.UntilPed = Mod(CrossGreen + AmberTime + 1f - Mod(t, CrossCycle), CrossCycle);
+                    break;
+                default:
+                {
+                    int groups = b.Kind == Ctl.Junction ? b.Groups : 2;
+                    int group = Mathf.Max(0, b.Group);
+                    st.Vehicle = JunctionAspect(group, groups, t);
+                    st.PedGreen = PedPhase(groups, t);
+                    for (int g = 0; g < groups; g++)
+                        if (g != group && JunctionAspect(g, groups, t) == Aspect.Green) st.OtherStageGreen = true;
+                    float cycle = Cycle(groups);
+                    st.UntilPed = Mod(groups * StageLength - Mod(t, cycle), cycle);
+                    break;
+                }
+            }
+            if (st.PedGreen) st.UntilPed = 0;
+            return st;
+        }
+
         // ------------------------------------------------------------------ timing
 
         private static float StageLength => Green + AmberTime + AllRed;

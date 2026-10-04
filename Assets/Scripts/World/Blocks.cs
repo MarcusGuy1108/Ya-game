@@ -10,7 +10,24 @@ namespace UKCity.World
     public enum RenderLayer : byte { Opaque, Cutout, Transparent }
 
     /// <summary>Faces whose texture changes over time (drawn by DynamicFaces on top of the static mesh).</summary>
-    public enum AnimKind : byte { None, VehicleSignal, PedSignal, Belisha, WigWag, Vms, LaneSignal, Vas }
+    public enum AnimKind : byte { None, Lamps, Vms, LaneSignal, Vas }
+
+    /// <summary>What a lamp (lens) on a signal head shows; decides when it lights.</summary>
+    public enum LampRole : byte
+    {
+        Red, Amber, Green, FilterLeft, FilterRight, NoRightTurn, NoLeftTurn,
+        RedMan, GreenMan, Wait, Beacon, WigLeft, WigRight
+    }
+
+    /// <summary>A lens on a model: one face of one box, overlaid with LitTile (and a soft glow) when lit.</summary>
+    public struct Lamp
+    {
+        public int Box, Face;
+        public LampRole Role;
+        public int LitTile;
+        public int GlowTile;
+        public float GlowScale;
+    }
 
     public static class BlockIds
     {
@@ -47,6 +64,10 @@ namespace UKCity.World
         public const ushort LitterBin = 120, GritBin = 121, Cabinet = 122, TrafficCone = 123, RoadworksBarrier = 124;
         public const ushort Bench = 125, CycleStand = 126, SosPhone = 127, MarkerPost = 128, EvCharger = 129;
         public const ushort GantryTruss = 130, GantryLeg = 131, LaneSignal = 132, WigWag = 133, Vas = 134, Railings = 135, LampLed = 136;
+        // Signal head variants
+        public const ushort SignalClassic = 140, SignalArrowLeft = 141, SignalArrowRight = 142, SignalArrowAhead = 143;
+        public const ushort SignalFilterLeft = 144, SignalFilterRight = 145, SignalNoRightPod = 146, SignalNoLeftPod = 147;
+        public const ushort CycleSignal = 148, PuffinUnit = 149, ToucanSignal = 150, SignalClassicFilterLeft = 151;
 
         /// <summary>First id used by the generated sign catalogue.</summary>
         public const int FirstSign = 300;
@@ -106,6 +127,10 @@ namespace UKCity.World
         public int[] AnimFaces = { 5 };
         /// <summary>Animation frames (tiles); meaning depends on Anim.</summary>
         public int[] Frames;
+        /// <summary>Lenses for AnimKind.Lamps.</summary>
+        public Lamp[] Lamps;
+        /// <summary>Lamps follow the pedestrian stage rather than a vehicle approach.</summary>
+        public bool PedestrianLamps;
 
         public bool Occludes => Shape == BlockShape.Cube && Layer == RenderLayer.Opaque;
         public bool CastsAO => Shape == BlockShape.Cube && Layer != RenderLayer.Transparent;
@@ -369,33 +394,7 @@ namespace UKCity.World
                 new Box(V(0.15f, 0.76f, 0.0f), V(0.85f, 0.84f, 0.75f), dark).Bottom(led),
                 new Box(V(0.45f, 0.76f, 0.7f), V(0.55f, 0.83f, 1.5f), grey).NoCollide());
 
-            // Vehicle signal head on a backing board with the UK white border.
-            int board = Tile("signal_board");
-            var tl = ModelBlock(BlockIds.TrafficLight, "Traffic Signal Head", "Signals", Tile("signal_green"),
-                PostBehind(grey),
-                new Box(V(0.2f, 0.02f, 0.56f), V(0.8f, 0.98f, 0.6f), black).Front(board).Full(),
-                new Box(V(0.32f, 0.06f, 0.32f), V(0.68f, 0.94f, 0.56f), black).Front(Tile("signal_off")).Full());
-            Animate(tl, AnimKind.VehicleSignal, 2, "signal_red", "signal_redamber", "signal_green", "signal_amber");
-
-            var ped = ModelBlock(BlockIds.PedSignal, "Pedestrian Signal", "Signals", Tile("ped_green"),
-                PostBehind(grey),
-                new Box(V(0.28f, 0.22f, 0.36f), V(0.72f, 0.88f, 0.62f), black).Front(Tile("ped_off")).Full());
-            Animate(ped, AnimKind.PedSignal, 1, "ped_red", "ped_green");
-
-            ModelBlock(BlockIds.PushButton, "Crossing Push Button", "Signals", Tile("push_button"),
-                PostBehind(grey),
-                new Box(V(0.3f, 0.3f, 0.36f), V(0.7f, 0.72f, 0.56f), Tile("yellow_box")).Front(Tile("push_button")).Full());
-
-            var bel = ModelBlock(BlockIds.Belisha, "Belisha Beacon", "Signals", Tile("belisha_on"),
-                new Box(V(0.22f, 0.0f, 0.22f), V(0.78f, 0.56f, 0.78f), Tile("belisha_off")).Full());
-            Animate(bel, AnimKind.Belisha, 0, "belisha_on");
-            bel.AnimFaces = new[] { 0, 1, 2, 4, 5 };
-            bel.Rotatable = false;
-
-            var wig = ModelBlock(BlockIds.WigWag, "School Flashing Lights", "Signals", Tile("wigwag_l"),
-                PostBehind(grey),
-                new Box(V(0.06f, 0.25f, 0.3f), V(0.94f, 0.75f, 0.42f), black).Front(Tile("wigwag_off")).Full());
-            Animate(wig, AnimKind.WigWag, 1, "wigwag_l", "wigwag_r");
+            SignalModels.Register();
 
             var vas = ModelBlock(BlockIds.Vas, "Vehicle Activated Sign (30)", "Signals", Tile("vas_30"),
                 PostBehind(grey),

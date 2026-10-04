@@ -370,7 +370,7 @@ namespace UKCity.UI
                     GUI.Label(new Rect(opts.x, opts.y + 58, opts.width, 120), "Click a road with pavements to add a crossing, with zig-zags, tactile paving and beacons or signals. Click an existing crossing to switch its type. Bulldoze removes it.", small);
                     break;
                 case PlannerTool.Signals:
-                    GUI.Label(opts, "Click a junction (3+ roads) to add or remove traffic lights. You get stop lines, lane arrows, a pedestrian stage with crossings, and signal heads that cycle red, red+amber, green, amber.\n\nShift+click toggles a yellow box junction.", label);
+                    GUI.Label(opts, "Click a junction (3+ roads) to add traffic lights; click again to cycle the hardware: LED heads, older-style heads, LED with left filter arrows and illuminated no-right-turn pods, then off.\n\nYou get stop lines, lane arrows and a pedestrian stage with crossings. Shift+click toggles a yellow box junction.\n\nMore head types (arrow signals, cycle signals, toucan, puffin units) are in the building list under Signals.", label);
                     break;
                 case PlannerTool.Sign: SignOptions(opts); break;
                 case PlannerTool.Building: BuildingOptions(opts); break;
@@ -501,6 +501,16 @@ namespace UKCity.UI
                     y += 30;
                     if (node.Signals && Button(new Rect(r.x, y, r.width, 26), node.YellowBox ? "Remove yellow box" : "Add yellow box")) city.SetYellowBox(node.Id, !node.YellowBox);
                     y += 30;
+                    if (node.Signals)
+                    {
+                        GUI.Label(new Rect(r.x, y, r.width, 20), "Signal heads:", small);
+                        y += 20;
+                        foreach (SignalStyle st in new[] { SignalStyle.Modern, SignalStyle.Classic, SignalStyle.Filters })
+                        {
+                            if (Button(new Rect(r.x, y, r.width, 24), PlannerController.StyleName(st), node.Style == st)) city.SetSignalStyle(node.Id, st);
+                            y += 26;
+                        }
+                    }
                 }
                 if (Button(new Rect(r.x, y, r.width, 26), "Delete junction  (Del)")) pl.DeleteSelection();
             }

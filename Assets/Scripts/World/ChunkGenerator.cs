@@ -80,11 +80,15 @@ namespace UKCity.World
                     case PropKind.SignalHead:
                         Put(data, minX, minZ, p.X, S + 1, p.Z, BlockIds.PoleGrey);
                         Put(data, minX, minZ, p.X, S + 2, p.Z, BlockIds.PoleGrey);
-                        Put(data, minX, minZ, p.X, S + 3, p.Z, BlockState.Make(BlockIds.TrafficLight, p.Facing));
+                        Put(data, minX, minZ, p.X, S + 3, p.Z, BlockState.Make(p.Block != 0 ? p.Block : BlockIds.TrafficLight, p.Facing));
                         break;
                     case PropKind.PedHead:
                         Put(data, minX, minZ, p.X, S + 1, p.Z, BlockState.Make(BlockIds.PushButton, p.Facing));
                         Put(data, minX, minZ, p.X, S + 2, p.Z, BlockState.Make(BlockIds.PedSignal, p.Facing));
+                        break;
+                    case PropKind.PuffinUnit:
+                        Put(data, minX, minZ, p.X, S + 1, p.Z, BlockState.Make(BlockIds.PuffinUnit, p.Facing));
+                        Put(data, minX, minZ, p.X, S + 2, p.Z, BlockIds.PoleGrey);
                         break;
                 }
             }

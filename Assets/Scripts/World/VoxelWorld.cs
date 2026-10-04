@@ -80,7 +80,7 @@ namespace UKCity.World
 
             opaqueMat = MakeMaterial("UKCity/Voxel");
             transparentMat = MakeMaterial("UKCity/VoxelTransparent");
-            if (Animated != null) Animated.Material = opaqueMat;
+            if (Animated != null) { Animated.Material = opaqueMat; Animated.GlowMaterial = transparentMat; }
 
             if (sortedOffsets == null)
             {

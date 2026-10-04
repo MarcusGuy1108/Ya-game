@@ -321,8 +321,19 @@ namespace UKCity.Planner
                 if (!n.Signals) city.SetSignals(n.Id, true);
                 city.SetYellowBox(n.Id, !n.YellowBox);
             }
-            else city.SetSignals(n.Id, !n.Signals);
+            else
+            {
+                // Cycle: off -> LED -> older style -> LED with filter arrows and no-turn pods -> off.
+                if (!n.Signals) { city.SetSignalStyle(n.Id, SignalStyle.Modern); city.SetSignals(n.Id, true); }
+                else if (n.Style == SignalStyle.Modern) city.SetSignalStyle(n.Id, SignalStyle.Classic);
+                else if (n.Style == SignalStyle.Classic) city.SetSignalStyle(n.Id, SignalStyle.Filters);
+                else city.SetSignals(n.Id, false);
+                Game.Toast(n.Signals ? $"Signals: {StyleName(n.Style)}" : "Signals removed");
+            }
         }
+
+        public static string StyleName(SignalStyle s) =>
+            s == SignalStyle.Classic ? "older style heads" : s == SignalStyle.Filters ? "LED with filter arrows + no right turn pods" : "LED heads";
 
         // ------------------------------------------------------------------ signs
 

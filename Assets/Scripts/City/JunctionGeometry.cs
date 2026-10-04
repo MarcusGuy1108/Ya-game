@@ -102,9 +102,9 @@ namespace UKCity.City
             Points.Add(new PointMarkData { P = node + a.U * dist + Left(dir) * lat, Dir = dir, Mark = MarkingKind.Triangle });
         }
 
-        private void Prop(Vector2 p, PropKind kind, Vector2 faceDir)
+        private void Prop(Vector2 p, PropKind kind, Vector2 faceDir, ushort block = 0)
         {
-            Props.Add(new PropData { X = Mathf.FloorToInt(p.x), Z = Mathf.FloorToInt(p.y), Kind = kind, Facing = BlockState.FacingToward(faceDir) });
+            Props.Add(new PropData { X = Mathf.FloorToInt(p.x), Z = Mathf.FloorToInt(p.y), Kind = kind, Facing = BlockState.FacingToward(faceDir), Block = block });
         }
 
         // ------------------------------------------------------------------ junction types
@@ -165,8 +165,11 @@ namespace UKCity.City
                 {
                     if (o.Seg == a.Seg) continue;
                     float sin = Mathf.Abs(o.U.x * a.U.y - o.U.y * a.U.x);
+                    // Arms carrying straight on from this one don't cross it, so they don't push the stop line back.
+                    if (sin < 0.3f) continue;
                     m = Mathf.Max(m, o.Type.CarriageHalf / Mathf.Max(0.35f, sin));
                 }
+                if (m <= 0f) m = a.Type.CarriageHalf;
                 float ch = a.Type.CarriageHalf;
                 float crossing = m + 3f;     // centre of the pedestrian crossing
                 float stop = m + 6.5f;       // vehicle stop line
@@ -183,9 +186,17 @@ namespace UKCity.City
                 Transverse.Add(new TransverseData { P = n.Pos + a.U * crossing, Dir = dir, LatFrom = -ch - 3.5f, LatTo = -ch - 0.5f, HalfLen = 1.5f, Surface = SurfaceKind.Tactile });
 
                 // Primary signal on the nearside (left) just past the stop line, secondary on the offside.
+                // Filter style: a left filter arrow on the primary, an illuminated no-right-turn pod on the secondary.
+                ushort primary, secondary;
+                switch (n.Style)
+                {
+                    case SignalStyle.Classic: primary = secondary = BlockIds.SignalClassic; break;
+                    case SignalStyle.Filters: primary = BlockIds.SignalFilterLeft; secondary = BlockIds.SignalNoRightPod; break;
+                    default: primary = secondary = BlockIds.TrafficLight; break;
+                }
                 var nearKerb = left * (ch + 1.5f);
-                Prop(n.Pos + a.U * (stop - 0.5f) + nearKerb, PropKind.SignalHead, a.U);
-                Prop(n.Pos + a.U * (stop - 0.5f) - nearKerb, PropKind.SignalHead, a.U);
+                Prop(n.Pos + a.U * (stop - 0.5f) + nearKerb, PropKind.SignalHead, a.U, primary);
+                Prop(n.Pos + a.U * (stop - 0.5f) - nearKerb, PropKind.SignalHead, a.U, secondary);
                 // Pedestrian heads at each end of the crossing, looking across the road.
                 Prop(n.Pos + a.U * (crossing + 1f) + nearKerb, PropKind.PedHead, -left);
                 Prop(n.Pos + a.U * (crossing - 1f) - nearKerb, PropKind.PedHead, left);
@@ -261,10 +272,12 @@ namespace UKCity.City
                     Transverse.Add(new TransverseData { P = p + dir * 1.5f, Dir = dir, LatFrom = -ch, LatTo = ch, HalfLen = 0.5f, Mark = MarkingKind.Studs });
                     Transverse.Add(new TransverseData { P = p - dir * 3.5f, Dir = dir, LatFrom = 0, LatTo = ch, HalfLen = 0.5f, Mark = MarkingKind.Stop });
                     Transverse.Add(new TransverseData { P = p + dir * 3.5f, Dir = -dir, LatFrom = 0, LatTo = ch, HalfLen = 0.5f, Mark = MarkingKind.Stop });
-                    Prop(p - dir * 4f + left * (ch + 1.5f), PropKind.SignalHead, -dir);
-                    Prop(p + dir * 4f - left * (ch + 1.5f), PropKind.SignalHead, dir);
-                    Prop(p + left * (ch + 1.5f) + dir * 0.5f, PropKind.PedHead, -left);
-                    Prop(p - left * (ch + 1.5f) - dir * 0.5f, PropKind.PedHead, left);
+                    Prop(p - dir * 4f + left * (ch + 1.5f), PropKind.SignalHead, -dir, BlockIds.TrafficLight);
+                    Prop(p + dir * 4f - left * (ch + 1.5f), PropKind.SignalHead, dir, BlockIds.TrafficLight);
+                    // Puffin near-side units sit upstream, so a pedestrian watching the display also watches the
+                    // traffic coming towards them in the nearest lane (on the left, UK).
+                    Prop(p + left * (ch + 1.5f) - dir * 1.0f, PropKind.PuffinUnit, dir);
+                    Prop(p - left * (ch + 1.5f) + dir * 1.0f, PropKind.PuffinUnit, -dir);
                 }
             }
         }

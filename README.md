@@ -84,6 +84,16 @@ F1 shows the controls in game. Esc opens the menu, which can also switch texture
   signs. Motorway message signs cycle through messages, and smart-motorway lane signals change speed limits and
   close lanes.
 
+**Signal hardware (all 3D, every lens lit on its own with a soft glow)**
+- Modern LED heads, older-style heads with ribbed lenses and long hoods, and full arrow signals (left, ahead, right).
+- Heads with a green filter arrow beside them, which runs while the main head is red and another stage is moving.
+- Heads with an illuminated "no right turn" or "no left turn" pod, lit while that approach has green.
+- Low-level cycle signals, far-side pedestrian heads, toucan heads (walk + cycle), puffin near-side units and push
+  buttons with a WAIT lamp, Belisha beacons and school wig-wags.
+- The planner's Signals tool cycles a junction between LED heads, older heads, and LED with filters and pods.
+
+![Every head type during the filter stage](Docs/signals-heads-filter-stage.png)
+
 **Signs (about 90, all UK)**
 - Speed limits 20 to 70, the national speed limit, 20 zone, and end of zone.
 - Regulatory: stop, give way, no entry, no left/right/U-turn, no overtaking, weight limit, no waiting, clearway,

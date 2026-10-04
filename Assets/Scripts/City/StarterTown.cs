@@ -35,6 +35,7 @@ namespace UKCity.City
             city.AddCrossing(highSouth.Id, (40.5f - 0.5f) / 70f);
             city.SetSignals(j.Id, true);
             city.SetYellowBox(j.Id, true);
+            city.SetSignalStyle(j.Id, SignalStyle.Filters);
             var mainEast = city.FindSegmentBetween(r.Id, e.Id);
             city.AddCrossing(mainEast.Id, (60f - 0.5f) / 160f, CrossingKind.Signal);
 
@@ -92,6 +93,15 @@ namespace UKCity.City
             Put(city, "grit_bin", -9, 66, 0);
             Put(city, "cabinet", 9, 76, 1);
             Put(city, "cycle_stand", -8, 22, 3);
+
+            // A row of every kind of signal head on the high street pavement (they run with the junction).
+            string[] heads =
+            {
+                "signal_classic", "signal_classic_filter", "traffic_lights", "signal_filter_left", "signal_filter_right",
+                "signal_noright", "signal_noleft", "signal_arrow_left", "signal_arrow_ahead", "signal_arrow_right",
+                "cycle_signal", "toucan_signal", "puffin_unit"
+            };
+            for (int i = 0; i < heads.Length; i++) Put(city, heads[i], -8, 80 + i * 2, 3);
 
             // Motorway furniture.
             Sign(city, "gantry_smart", 245, 40);

@@ -53,7 +53,7 @@ namespace UKCity.World
                 Parallel.For(0, list.Length, i =>
                 {
                     var c = new PixelCanvas(TileSize, TileSize);
-                    if (!Signs.PaintTile(list[i], c) && !BlockPainter.Paint(list[i], c)) Missing(c);
+                    if (!Signs.PaintTile(list[i], c) && !SignalPainter.Paint(list[i], c) && !BlockPainter.Paint(list[i], c)) Missing(c);
                     var px = new Color32[TileSize * TileSize];
                     c.CopyTo(px, 0, 0, TileSize);
                     result[i] = px;

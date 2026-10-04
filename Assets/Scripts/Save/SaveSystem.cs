@@ -7,7 +7,7 @@ using UKCity.World;
 
 namespace UKCity.Save
 {
-    [Serializable] public class NodeSave { public int id; public float x, z; public bool roundabout; public float radius; public bool signals, yellowBox; }
+    [Serializable] public class NodeSave { public int id; public float x, z; public bool roundabout; public float radius; public bool signals, yellowBox; public int signalStyle; }
     [Serializable] public class SegmentSave { public int id, a, b, type; public float[] crossings; public int[] crossingKinds; }
     [Serializable] public class BuildingSave { public int id; public string template; public int x, y, z, rot; }
     [Serializable] public class EditSave { public int cx, cz; public int[] packed; }
@@ -98,7 +98,7 @@ namespace UKCity.Save
                 hotbar = Array.ConvertAll(g.Interactor.Hotbar, b => (int)b)
             };
             foreach (var n in g.City.Nodes.Values)
-                s.nodes.Add(new NodeSave { id = n.Id, x = n.Pos.x, z = n.Pos.y, roundabout = n.IsRoundabout, radius = n.RoundaboutRadius, signals = n.Signals, yellowBox = n.YellowBox });
+                s.nodes.Add(new NodeSave { id = n.Id, x = n.Pos.x, z = n.Pos.y, roundabout = n.IsRoundabout, radius = n.RoundaboutRadius, signals = n.Signals, yellowBox = n.YellowBox, signalStyle = (int)n.Style });
             foreach (var seg in g.City.Segments.Values)
                 s.segments.Add(new SegmentSave
                 {
@@ -140,7 +140,7 @@ namespace UKCity.Save
             var city = g.City;
             city.Clear();
             foreach (var n in s.nodes)
-                city.Nodes[n.id] = new RoadNode { Id = n.id, Pos = new Vector2(n.x, n.z), IsRoundabout = n.roundabout, RoundaboutRadius = n.radius, Signals = n.signals, YellowBox = n.yellowBox };
+                city.Nodes[n.id] = new RoadNode { Id = n.id, Pos = new Vector2(n.x, n.z), IsRoundabout = n.roundabout, RoundaboutRadius = n.radius, Signals = n.signals, YellowBox = n.yellowBox, Style = (SignalStyle)n.signalStyle };
             foreach (var seg in s.segments)
             {
                 if (!city.Nodes.ContainsKey(seg.a) || !city.Nodes.ContainsKey(seg.b)) continue;

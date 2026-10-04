@@ -13,12 +13,17 @@ namespace UKCity.City
         public float RoundaboutRadius;
         /// <summary>Junction controlled by traffic lights.</summary>
         public bool Signals;
+        /// <summary>Which signal heads a signalised junction gets.</summary>
+        public SignalStyle Style;
         /// <summary>Yellow box junction markings.</summary>
         public bool YellowBox;
         public readonly List<int> Segments = new List<int>();
     }
 
     public enum CrossingKind : byte { Zebra, Signal }
+
+    /// <summary>Signal hardware at a junction: plain LED heads, older-style heads, or LED with filters and pods.</summary>
+    public enum SignalStyle : byte { Modern, Classic, Filters }
 
     public struct Crossing
     {
@@ -193,6 +198,13 @@ namespace UKCity.City
             if (!Nodes.TryGetValue(nodeId, out var n)) return;
             n.Signals = on;
             if (!on) n.YellowBox = false;
+            RaiseAround(nodeId);
+        }
+
+        public void SetSignalStyle(int nodeId, SignalStyle style)
+        {
+            if (!Nodes.TryGetValue(nodeId, out var n)) return;
+            n.Style = style;
             RaiseAround(nodeId);
         }
 
@@ -520,7 +532,7 @@ namespace UKCity.City
 
     // ------------------------------------------------------------------ immutable snapshot types
 
-    public enum PropKind : byte { Lamp, Belisha, SignalHead, PedHead }
+    public enum PropKind : byte { Lamp, Belisha, SignalHead, PedHead, PuffinUnit }
 
     public struct SegmentData
     {
@@ -588,6 +600,8 @@ namespace UKCity.City
         public PropKind Kind;
         public int Facing;
         public Vector2Int Arm;
+        /// <summary>Block for signal heads (which variant of head).</summary>
+        public ushort Block;
     }
 
     /// <summary>A read-only copy of the city near one chunk, handed to a worker thread.</summary>

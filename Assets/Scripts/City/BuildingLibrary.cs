@@ -369,7 +369,7 @@ namespace UKCity.City
         {
             var b = new TemplateBuilder(1, poleHeight + 2, overhang ? 2 : 1);
             int z = overhang ? 1 : 0;
-            b.Fill(0, 1, z, 0, poleHeight, z, BlockIds.PoleGrey);
+            if (poleHeight > 0) b.Fill(0, 1, z, 0, poleHeight, z, BlockIds.PoleGrey);
             b.Set(0, overhang ? poleHeight : poleHeight + 1, 0, head);
             return b.Build(id, name, cat, 0, z, desc);
         }
@@ -392,7 +392,25 @@ namespace UKCity.City
         {
             Register(Mast("street_lamp", "Street Lamp (classic)", "Street", 6, BlockIds.LampHead, true, "Lamp column with an overhanging lantern."));
             Register(Mast("street_lamp_led", "Street Lamp (LED)", "Street", 7, BlockIds.LampLed, true, "Modern LED column."));
-            Register(Mast("traffic_lights", "Traffic Signal", "Signals", 2, BlockIds.TrafficLight, false, "Vehicle signal head. Cycles on its own, or with the junction it stands at."));
+            Register(Mast("traffic_lights", "Signal Head (LED)", "Signals", 2, BlockIds.TrafficLight, false, "Modern LED head. Runs with the junction it stands at, or on its own."));
+            Register(Mast("signal_classic", "Signal Head (older style)", "Signals", 2, BlockIds.SignalClassic, false, "Incandescent head with long hoods."));
+            Register(Mast("signal_classic_filter", "Older Head + Left Filter", "Signals", 2, BlockIds.SignalClassicFilterLeft, false, "Older head with a green filter arrow."));
+            Register(Mast("signal_filter_left", "LED Head + Left Filter", "Signals", 2, BlockIds.SignalFilterLeft, false, "Green arrow lights while the main head is red and another stage runs."));
+            Register(Mast("signal_filter_right", "LED Head + Right Filter", "Signals", 2, BlockIds.SignalFilterRight, false, "Right-turn filter arrow."));
+            Register(Mast("signal_noright", "LED Head + No Right Turn Pod", "Signals", 2, BlockIds.SignalNoRightPod, false, "Pod lights 'no right turn' while this approach has green."));
+            Register(Mast("signal_noleft", "LED Head + No Left Turn Pod", "Signals", 2, BlockIds.SignalNoLeftPod, false, "Pod lights 'no left turn' while this approach has green."));
+            Register(Mast("signal_arrow_left", "Arrow Signal (left)", "Signals", 2, BlockIds.SignalArrowLeft, false, "Red/amber/green arrows for a left-turn lane."));
+            Register(Mast("signal_arrow_ahead", "Arrow Signal (ahead)", "Signals", 2, BlockIds.SignalArrowAhead, false, "Ahead-only lane signal."));
+            Register(Mast("signal_arrow_right", "Arrow Signal (right)", "Signals", 2, BlockIds.SignalArrowRight, false, "Right-turn lane signal."));
+            Register(Mast("cycle_signal", "Low-level Cycle Signal", "Signals", 0, BlockIds.CycleSignal, false, "Small cycle signal at rider eye level."));
+            var tou = new TemplateBuilder(1, 3, 1);
+            tou.Set(0, 1, 0, BlockIds.PushButton);
+            tou.Set(0, 2, 0, BlockIds.ToucanSignal);
+            Register(tou.Build("toucan_signal", "Toucan Signal + Button", "Signals", 0, 0, "Green man and bike for shared crossings."));
+            var puf = new TemplateBuilder(1, 3, 1);
+            puf.Set(0, 1, 0, BlockIds.PuffinUnit);
+            puf.Set(0, 2, 0, BlockIds.PoleGrey);
+            Register(puf.Build("puffin_unit", "Puffin Near-side Unit", "Signals", 0, 0, "Push button with red/green man display on top."));
             var ped = new TemplateBuilder(1, 3, 1);
             ped.Set(0, 1, 0, BlockIds.PushButton);
             ped.Set(0, 2, 0, BlockIds.PedSignal);
