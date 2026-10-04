@@ -8,13 +8,16 @@ namespace UKCity.World
     {
         public SurfaceKind Kind;
         public MarkingKind Marking;
-        public bool AxisX;
+        /// <summary>Facing for the marking block (0 = road runs north-south).</summary>
+        public int Facing;
+        /// <summary>Block standing on the surface (central barrier, crash barrier), 0 = none.</summary>
+        public ushort Above;
     }
 
     /// <summary>
     /// Produces the voxels for one chunk in three layers:
     ///   1. procedural terrain (flat English countryside with oaks),
-    ///   2. the city plan (roads, roundabouts, props, building templates),
+    ///   2. the city plan (roads, junction markings, street furniture, building templates),
     ///   3. the player's own block edits.
     /// Pure function of its inputs, so it runs on worker threads.
     /// </summary>
@@ -23,9 +26,9 @@ namespace UKCity.World
         private const int S = WorldConst.SurfaceY;
         private const int ClearHeight = 14;
 
-        public static byte[] Generate(ChunkCoord cc, int seed, CitySnapshot city, int[] edits)
+        public static ushort[] Generate(ChunkCoord cc, int seed, CitySnapshot city, int[] edits)
         {
-            var data = new byte[WorldConst.ChunkVolume];
+            var data = new ushort[WorldConst.ChunkVolume];
             int minX = cc.MinX, minZ = cc.MinZ;
 
             // 1. Terrain.
@@ -54,24 +57,35 @@ namespace UKCity.World
                             data[WorldConst.Index(x, S + 1, z)] = BlockIds.Hedge;
                             data[WorldConst.Index(x, S + 2, z)] = BlockIds.Hedge;
                         }
+                        else if (s.Above != 0) data[WorldConst.Index(x, S + 1, z)] = s.Above;
                     }
             }
 
-            // 2b. Street furniture generated from roads.
+            // 2b. Street furniture generated from roads and junctions.
             foreach (var p in city.Props)
             {
                 var col = Sample(p.X + 0.5f, p.Z + 0.5f, city).Kind;
-                if (col != SurfaceKind.Pavement && col != SurfaceKind.Verge) continue;
-                if (p.Kind == PropKind.Lamp)
+                if (col != SurfaceKind.Pavement && col != SurfaceKind.Verge && col != SurfaceKind.Tactile) continue;
+                switch (p.Kind)
                 {
-                    for (int y = S + 1; y <= S + 6; y++) Put(data, minX, minZ, p.X, y, p.Z, BlockIds.PoleGrey);
-                    Put(data, minX, minZ, p.X + p.Arm.x, S + 6, p.Z + p.Arm.y, BlockIds.LampHead);
-                }
-                else
-                {
-                    Put(data, minX, minZ, p.X, S + 1, p.Z, BlockIds.PoleStriped);
-                    Put(data, minX, minZ, p.X, S + 2, p.Z, BlockIds.PoleStriped);
-                    Put(data, minX, minZ, p.X, S + 3, p.Z, BlockIds.Belisha);
+                    case PropKind.Lamp:
+                        for (int y = S + 1; y <= S + 6; y++) Put(data, minX, minZ, p.X, y, p.Z, BlockIds.PoleGrey);
+                        Put(data, minX, minZ, p.X + p.Arm.x, S + 6, p.Z + p.Arm.y, BlockState.Make(BlockIds.LampHead, p.Facing));
+                        break;
+                    case PropKind.Belisha:
+                        Put(data, minX, minZ, p.X, S + 1, p.Z, BlockIds.PoleStriped);
+                        Put(data, minX, minZ, p.X, S + 2, p.Z, BlockIds.PoleStriped);
+                        Put(data, minX, minZ, p.X, S + 3, p.Z, BlockIds.Belisha);
+                        break;
+                    case PropKind.SignalHead:
+                        Put(data, minX, minZ, p.X, S + 1, p.Z, BlockIds.PoleGrey);
+                        Put(data, minX, minZ, p.X, S + 2, p.Z, BlockIds.PoleGrey);
+                        Put(data, minX, minZ, p.X, S + 3, p.Z, BlockState.Make(BlockIds.TrafficLight, p.Facing));
+                        break;
+                    case PropKind.PedHead:
+                        Put(data, minX, minZ, p.X, S + 1, p.Z, BlockState.Make(BlockIds.PushButton, p.Facing));
+                        Put(data, minX, minZ, p.X, S + 2, p.Z, BlockState.Make(BlockIds.PedSignal, p.Facing));
+                        break;
                 }
             }
 
@@ -81,19 +95,19 @@ namespace UKCity.World
             // 3. Player edits.
             if (edits != null)
             {
-                foreach (int e in edits) data[e >> 8] = (byte)(e & 0xFF);
+                foreach (int e in edits) data[e >> 16] = (ushort)(e & 0xFFFF);
             }
             return data;
         }
 
-        private static void Put(byte[] data, int minX, int minZ, int wx, int y, int wz, byte b)
+        private static void Put(ushort[] data, int minX, int minZ, int wx, int y, int wz, ushort b)
         {
             int lx = wx - minX, lz = wz - minZ;
             if (lx < 0 || lz < 0 || lx >= 16 || lz >= 16 || y < 0 || y >= WorldConst.ChunkHeight) return;
             data[WorldConst.Index(lx, y, lz)] = b;
         }
 
-        private static void Stamp(byte[] data, int minX, int minZ, PlacementData p)
+        private static void Stamp(ushort[] data, int minX, int minZ, PlacementData p)
         {
             var t = p.Template;
             var fp = p.Footprint;
@@ -108,7 +122,7 @@ namespace UKCity.World
                     {
                         int y = p.Origin.y + ly;
                         if (y < 1 || y >= WorldConst.ChunkHeight) continue;
-                        byte b = t.WorldBlock(t.Get(lx, ly, lz), p.Origin, p.Rotation);
+                        ushort b = t.WorldBlock(t.Get(lx, ly, lz), p.Origin, p.Rotation);
                         if (b == BuildingTemplate.Keep) continue;
                         data[WorldConst.Index(cx, y, cz)] = b;
                     }
@@ -119,7 +133,7 @@ namespace UKCity.World
 
         private const int TreeCell = 9;
 
-        private static void Trees(byte[] data, int minX, int minZ, int seed, CitySnapshot city)
+        private static void Trees(ushort[] data, int minX, int minZ, int seed, CitySnapshot city)
         {
             int c0x = WorldConst.FloorDiv(minX - 3, TreeCell), c1x = WorldConst.FloorDiv(minX + 18, TreeCell);
             int c0z = WorldConst.FloorDiv(minZ - 3, TreeCell), c1z = WorldConst.FloorDiv(minZ + 18, TreeCell);
@@ -153,7 +167,7 @@ namespace UKCity.World
             return false;
         }
 
-        private static void StampTree(byte[] data, int minX, int minZ, int tx, int tz, int trunk)
+        private static void StampTree(ushort[] data, int minX, int minZ, int tx, int tz, int trunk)
         {
             for (int y = trunk - 1; y <= trunk + 2; y++)
             {
@@ -174,26 +188,43 @@ namespace UKCity.World
 
         // ------------------------------------------------------------------ road rasterisation
 
-        public static byte SurfaceBlock(SurfaceSample s)
+        public static ushort SurfaceBlock(SurfaceSample s)
         {
             switch (s.Kind)
             {
                 case SurfaceKind.Asphalt:
+                    int id;
                     switch (s.Marking)
                     {
                         case MarkingKind.WhiteDashed:
-                        case MarkingKind.WhiteSolid: return s.AxisX ? BlockIds.LineX : BlockIds.LineZ;
-                        case MarkingKind.DoubleYellow: return s.AxisX ? BlockIds.YellowX : BlockIds.YellowZ;
+                        case MarkingKind.WhiteSolid: id = BlockIds.MarkLine; break;
+                        case MarkingKind.WhiteThick: id = BlockIds.MarkThickLine; break;
+                        case MarkingKind.DoubleYellow: id = BlockIds.MarkDoubleYellow; break;
+                        case MarkingKind.SingleYellow: id = BlockIds.MarkSingleYellow; break;
                         case MarkingKind.Paint: return BlockIds.RoadPaint;
+                        case MarkingKind.GiveWay: id = BlockIds.MarkGiveWay; break;
+                        case MarkingKind.GiveWaySingle: id = BlockIds.MarkGiveWaySingle; break;
+                        case MarkingKind.Stop: id = BlockIds.MarkStop; break;
+                        case MarkingKind.Zigzag: id = BlockIds.MarkZigzag; break;
+                        case MarkingKind.Studs: id = BlockIds.MarkStuds; break;
+                        case MarkingKind.Box: id = BlockIds.MarkBox; break;
+                        case MarkingKind.Triangle: id = BlockIds.MarkTriangle; break;
+                        case MarkingKind.ArrowAhead: id = BlockIds.MarkArrowAhead; break;
+                        case MarkingKind.Hatch: id = BlockIds.MarkHatch; break;
                         default: return BlockIds.Asphalt;
                     }
-                case SurfaceKind.Kerb: return BlockIds.Kerb;
-                case SurfaceKind.Pavement: return BlockIds.Pavement;
-                case SurfaceKind.Island: return s.Marking == MarkingKind.Paint ? BlockIds.RoadPaint : BlockIds.Grass;
+                    return BlockState.Make(id, s.Facing);
+                case SurfaceKind.Kerb:
                 case SurfaceKind.IslandKerb: return BlockIds.Kerb;
+                case SurfaceKind.Pavement: return BlockIds.Pavement;
+                case SurfaceKind.Tactile: return BlockIds.TactileRed;
+                case SurfaceKind.Barrier: return BlockIds.Concrete;
+                case SurfaceKind.Island: return s.Marking == MarkingKind.Paint ? BlockIds.RoadPaint : BlockIds.Grass;
                 default: return BlockIds.Grass; // verge, reservation, hedge base
             }
         }
+
+        private static int AlongFacing(float dx, float dz) => Mathf.Abs(dx) > Mathf.Abs(dz) ? 1 : 0;
 
         /// <summary>Works out what the road plan wants at the surface of one column.</summary>
         public static SurfaceSample Sample(float px, float pz, CitySnapshot city)
@@ -201,6 +232,7 @@ namespace UKCity.World
             var best = new SurfaceSample();
             int bestPrio = 0;
             int asphaltOwners = 0;
+            bool forced = false;
 
             var segs = city.Segments;
             for (int i = 0; i < segs.Length; i++)
@@ -235,28 +267,50 @@ namespace UKCity.World
 
                 var kind = band.Kind;
                 var mark = MarkingKind.None;
-                if (!cap)
+                ushort above = 0;
+                int facing = AlongFacing(dx, dz);
+                if (kind == SurfaceKind.Barrier) above = BlockState.Make(BlockIds.ConcreteBarrier, facing == 1 ? 0 : 1);
+                else if (kind == SurfaceKind.ArmcoVerge) above = BlockState.Make(BlockIds.Armco, lateral > 0 ? (facing == 1 ? 2 : 3) : (facing == 1 ? 0 : 1));
+
+                if (!cap && kind == SurfaceKind.Asphalt)
                 {
-                    bool zebra = false;
-                    if (kind == SurfaceKind.Asphalt && seg.Crossings != null)
+                    bool special = false;
+                    if (seg.Crossings != null)
                     {
-                        foreach (float c in seg.Crossings)
+                        for (int c = 0; c < seg.Crossings.Length; c++)
                         {
-                            if (Mathf.Abs(along - c) <= 1.5f)
+                            float d = Mathf.Abs(along - seg.Crossings[c]);
+                            bool zebra = seg.CrossingKinds[c] == CrossingKind.Zebra;
+                            if (zebra && d <= 1.5f)
                             {
-                                zebra = true;
+                                special = true;
                                 if ((Mathf.FloorToInt(lateral + 0.5f) & 1) == 0) mark = MarkingKind.Paint;
                                 break;
                             }
+                            if (!zebra && d <= 1.0f) { special = true; break; }
+                            float z0 = zebra ? 3.5f : 4.5f;
+                            if (d >= z0 && d <= z0 + 9f)
+                            {
+                                float edge = Mathf.Abs(lateral);
+                                if (edge >= type.CarriageHalf - 1f || (type.CentreLine && edge < 0.5f))
+                                {
+                                    special = true;
+                                    mark = MarkingKind.Zigzag;
+                                    break;
+                                }
+                            }
                         }
                     }
-                    if (!zebra && band.Marking != MarkingKind.None)
+                    if (!special && band.Marking != MarkingKind.None)
                     {
                         if (band.Marking == MarkingKind.WhiteDashed)
                         {
-                            float period = band.Dash + band.Gap;
-                            float m = along % period;
-                            if (m < band.Dash) mark = MarkingKind.WhiteDashed;
+                            float dash = band.Dash, gap = band.Gap;
+                            // Hazard warning line: longer dashes approaching a junction.
+                            bool centre = band.From == 0f;
+                            if (centre && ((!seg.SmoothA && along < 30f) || (!seg.SmoothB && len - along < 30f))) { dash = 4f; gap = 2f; }
+                            float m = along % (dash + gap);
+                            if (m < dash) mark = MarkingKind.WhiteDashed;
                         }
                         else mark = band.Marking;
                     }
@@ -269,7 +323,8 @@ namespace UKCity.World
                     bestPrio = prio;
                     best.Kind = kind;
                     best.Marking = mark;
-                    best.AxisX = Mathf.Abs(dx) >= Mathf.Abs(dz);
+                    best.Facing = facing;
+                    best.Above = above;
                 }
             }
 
@@ -306,11 +361,83 @@ namespace UKCity.World
                     bestPrio = prio;
                     best.Kind = kind;
                     best.Marking = mark;
+                    best.Above = 0;
                 }
+            }
+
+            // Rounded kerbs at junction corners.
+            var corners = city.Corners;
+            for (int i = 0; i < corners.Length; i++)
+            {
+                ref readonly var c = ref corners[i];
+                float rx = px - c.Node.x, rz = pz - c.Node.y;
+                float sa = rx * c.Na.x + rz * c.Na.y - c.Ha;
+                float sb = rx * c.Nb.x + rz * c.Nb.y - c.Hb;
+                if (sa < 0 || sb < 0 || sa > c.R || sb > c.R) continue;
+                if (bestPrio >= (int)SurfaceKind.Asphalt) continue;
+                // Centre of the kerb arc: R in from both carriageway edges.
+                float a1 = c.Na.x, b1 = c.Na.y, c1 = c.Ha + c.R;
+                float a2 = c.Nb.x, b2 = c.Nb.y, c2 = c.Hb + c.R;
+                float det = a1 * b2 - a2 * b1;
+                if (Mathf.Abs(det) < 1e-4f) continue;
+                float cx = (c1 * b2 - c2 * b1) / det, cz = (a1 * c2 - a2 * c1) / det;
+                float ddx = rx - cx, ddz = rz - cz;
+                float d = Mathf.Sqrt(ddx * ddx + ddz * ddz);
+                if (d > c.R)
+                {
+                    best.Kind = SurfaceKind.Asphalt;
+                    best.Marking = MarkingKind.None;
+                    best.Above = 0;
+                    bestPrio = (int)SurfaceKind.Asphalt;
+                    asphaltOwners = Math.Max(asphaltOwners, 2);
+                }
+                else if (d > c.R - 1f && c.KerbKind == SurfaceKind.Kerb) { best.Kind = SurfaceKind.Kerb; best.Above = 0; bestPrio = (int)SurfaceKind.Kerb; }
+                else if (d > c.R - 1f - c.Pw - (c.KerbKind == SurfaceKind.Kerb ? 0 : 1)) { best.Kind = c.OuterKind; best.Above = 0; bestPrio = (int)c.OuterKind; }
             }
 
             // Where two roads overlap (junctions), drop lane markings so the junction box is clean tarmac.
             if (best.Kind == SurfaceKind.Asphalt && asphaltOwners >= 2) best.Marking = MarkingKind.None;
+
+            // Lines across the road: give way, stop lines, studs; and tactile paving.
+            var tr = city.Transverse;
+            for (int i = 0; i < tr.Length; i++)
+            {
+                ref readonly var t = ref tr[i];
+                float rx = px - t.P.x, rz = pz - t.P.y;
+                float al = rx * t.Dir.x + rz * t.Dir.y;
+                if (al <= -t.HalfLen || al > t.HalfLen) continue;
+                float lat = -t.Dir.y * rx + t.Dir.x * rz;
+                if (lat < t.LatFrom || lat >= t.LatTo) continue;
+                if (t.Surface != SurfaceKind.None)
+                {
+                    if (best.Kind == SurfaceKind.Pavement) best.Kind = SurfaceKind.Tactile;
+                }
+                else if (best.Kind == SurfaceKind.Asphalt)
+                {
+                    best.Marking = t.Mark;
+                    best.Facing = AlongFacing(t.Dir.x, t.Dir.y);
+                    forced = true;
+                }
+            }
+
+            var pts = city.Points;
+            int cellX = Mathf.FloorToInt(px), cellZ = Mathf.FloorToInt(pz);
+            for (int i = 0; i < pts.Length; i++)
+            {
+                if (Mathf.FloorToInt(pts[i].P.x) != cellX || Mathf.FloorToInt(pts[i].P.y) != cellZ) continue;
+                if (best.Kind != SurfaceKind.Asphalt) continue;
+                best.Marking = pts[i].Mark;
+                best.Facing = BlockState.FacingToward(pts[i].Dir);
+                forced = true;
+            }
+
+            var discs = city.Discs;
+            if (!forced && best.Kind == SurfaceKind.Asphalt)
+                for (int i = 0; i < discs.Length; i++)
+                {
+                    float dx = px - discs[i].C.x, dz = pz - discs[i].C.y;
+                    if (dx * dx + dz * dz < discs[i].R * discs[i].R) { best.Marking = discs[i].Mark; best.Facing = 0; }
+                }
             return best;
         }
     }

@@ -29,6 +29,8 @@ namespace UKCity
         public Camera WalkCam { get; private set; }
         public Camera PlanCam { get; private set; }
         public GameMode Mode { get; private set; } = GameMode.Walk;
+        public TrafficSignals Signals { get; private set; }
+        public DynamicFaces Animated { get; private set; }
 
         public string ToastText { get; private set; }
         public float ToastUntil { get; private set; }
@@ -44,8 +46,11 @@ namespace UKCity
             SaveSystem.LoadCustomTemplates();
 
             City = new CityLayer();
+            Signals = new TrafficSignals(City);
+            Animated = new DynamicFaces { Signals = Signals };
             World = new GameObject("World").AddComponent<VoxelWorld>();
             World.transform.SetParent(transform, false);
+            World.Animated = Animated;
             World.Init(City, Random.Range(1, int.MaxValue));
 
             // Player + first person camera.
@@ -98,7 +103,12 @@ namespace UKCity
 
         private bool TryLoad()
         {
-            try { return SaveSystem.Load(this, SaveSlot); }
+            try
+            {
+                bool ok = SaveSystem.Load(this, SaveSlot);
+                Signals.Invalidate();
+                return ok;
+            }
             catch (System.Exception e)
             {
                 Debug.LogException(e);
@@ -112,6 +122,8 @@ namespace UKCity
         private void Update()
         {
             HandleGlobalKeys();
+            Signals.Time += Time.deltaTime;
+            Animated.Time = Signals.Time;
 
             bool menuOpen = Hud.Open != Panel.None;
             if (Mode == GameMode.Walk)
@@ -138,11 +150,13 @@ namespace UKCity
         {
             if (Mode == GameMode.Walk)
             {
+                Animated.Draw(WalkCam, WalkCam.transform.position, 140f);
                 Interactor.DrawOverlays(worldLines, WalkCam);
                 worldLines.Flush(WalkCam);
             }
             else
             {
+                Animated.Draw(PlanCam, PlanCam.transform.position, 400f);
                 Planner.DrawOverlays(overlayLines);
                 overlayLines.Flush(PlanCam);
             }
@@ -273,6 +287,7 @@ namespace UKCity
             World.ResetAll();
             Interactor.CancelTemplate();
             if (starterTown) StarterTown.Build(City);
+            Signals.Invalidate();
             Player.Teleport(new Vector3(6.5f, WorldConst.SurfaceY + 1, 28.5f));
             Player.Yaw = 0;
             Player.Pitch = 0;

@@ -4,7 +4,7 @@ Shader "UKCity/Voxel"
 {
     Properties
     {
-        _MainTex ("Atlas", 2D) = "white" {}
+        _Tiles ("Block Tiles", 2DArray) = "" {}
         _Cutoff ("Alpha Cutoff", Range(0,1)) = 0.5
     }
     SubShader
@@ -17,14 +17,15 @@ Shader "UKCity/Voxel"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma require 2darray
             #include "UnityCG.cginc"
             #include "UKCityCommon.cginc"
 
-            sampler2D _MainTex;
+            UNITY_DECLARE_TEX2DARRAY(_Tiles);
             float _Cutoff;
 
-            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; float4 color : COLOR; };
-            struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; };
+            struct appdata { float4 vertex : POSITION; float3 uv : TEXCOORD0; float4 color : COLOR; };
+            struct v2f { float4 pos : SV_POSITION; float3 uv : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; };
 
             v2f vert (appdata v)
             {
@@ -38,7 +39,7 @@ Shader "UKCity/Voxel"
 
             fixed4 frag (v2f i) : SV_Target
             {
-                fixed4 c = tex2D(_MainTex, i.uv);
+                fixed4 c = UNITY_SAMPLE_TEX2DARRAY(_Tiles, i.uv);
                 clip(c.a - _Cutoff);
                 c.rgb *= i.color.rgb * _UKDaylight;
                 c.rgb = lerp(c.rgb, _UKFogColor.rgb, i.fog);

@@ -6,7 +6,7 @@ namespace UKCity.World
     {
         public Vector3Int Pos;
         public Vector3Int Normal;
-        public byte Id;
+        public ushort Id;
         public float Distance;
         public Vector3Int Adjacent => Pos + Normal;
     }
@@ -33,7 +33,7 @@ namespace UKCity.World
             float t = 0;
             for (int i = 0; i < 512 && t <= maxDist; i++)
             {
-                byte id = world.GetBlock(x, y, z);
+                ushort id = world.GetBlock(x, y, z);
                 if (id == BlockIds.Unloaded) return false;
                 if (i > 0 || id != 0)
                 {

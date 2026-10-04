@@ -7,8 +7,8 @@ using UKCity.World;
 
 namespace UKCity.Save
 {
-    [Serializable] public class NodeSave { public int id; public float x, z; public bool roundabout; public float radius; }
-    [Serializable] public class SegmentSave { public int id, a, b, type; public float[] crossings; }
+    [Serializable] public class NodeSave { public int id; public float x, z; public bool roundabout; public float radius; public bool signals, yellowBox; }
+    [Serializable] public class SegmentSave { public int id, a, b, type; public float[] crossings; public int[] crossingKinds; }
     [Serializable] public class BuildingSave { public int id; public string template; public int x, y, z, rot; }
     [Serializable] public class EditSave { public int cx, cz; public int[] packed; }
 
@@ -17,20 +17,43 @@ namespace UKCity.Save
     {
         public string id, name, category, description;
         public int sx, sy, sz, ax, az;
+        /// <summary>1 = one byte per block (old), 2 = ushort block states.</summary>
+        public int format;
         public string blocks;
 
         public static TemplateSave From(BuildingTemplate t) => new TemplateSave
         {
             id = t.Id, name = t.Name, category = t.Category, description = t.Description,
             sx = t.SizeX, sy = t.SizeY, sz = t.SizeZ, ax = t.AnchorX, az = t.AnchorZ,
-            blocks = Convert.ToBase64String(t.Blocks)
+            format = 2, blocks = Convert.ToBase64String(ToBytes(t.Blocks))
         };
+
+        private static byte[] ToBytes(ushort[] v)
+        {
+            var b = new byte[v.Length * 2];
+            Buffer.BlockCopy(v, 0, b, 0, b.Length);
+            return b;
+        }
+
+        private ushort[] DecodeBlocks()
+        {
+            var raw = Convert.FromBase64String(blocks);
+            if (format < 2)
+            {
+                var old = new ushort[raw.Length];
+                for (int i = 0; i < raw.Length; i++) old[i] = raw[i] == 255 ? BuildingTemplate.Keep : raw[i];
+                return old;
+            }
+            var v = new ushort[raw.Length / 2];
+            Buffer.BlockCopy(raw, 0, v, 0, v.Length * 2);
+            return v;
+        }
 
         public BuildingTemplate ToTemplate() => new BuildingTemplate
         {
             Id = id, Name = name, Category = string.IsNullOrEmpty(category) ? "Custom" : category, Description = description ?? "",
             SizeX = sx, SizeY = sy, SizeZ = sz, AnchorX = ax, AnchorZ = az,
-            Blocks = Convert.FromBase64String(blocks), IsCustom = true
+            Blocks = DecodeBlocks(), IsCustom = true
         };
     }
 
@@ -40,7 +63,7 @@ namespace UKCity.Save
     [Serializable]
     public class WorldSave
     {
-        public int version = 1;
+        public int version = 2;
         public int seed;
         public int nextId;
         public float px, py, pz, yaw, pitch;
@@ -75,9 +98,14 @@ namespace UKCity.Save
                 hotbar = Array.ConvertAll(g.Interactor.Hotbar, b => (int)b)
             };
             foreach (var n in g.City.Nodes.Values)
-                s.nodes.Add(new NodeSave { id = n.Id, x = n.Pos.x, z = n.Pos.y, roundabout = n.IsRoundabout, radius = n.RoundaboutRadius });
+                s.nodes.Add(new NodeSave { id = n.Id, x = n.Pos.x, z = n.Pos.y, roundabout = n.IsRoundabout, radius = n.RoundaboutRadius, signals = n.Signals, yellowBox = n.YellowBox });
             foreach (var seg in g.City.Segments.Values)
-                s.segments.Add(new SegmentSave { id = seg.Id, a = seg.A, b = seg.B, type = seg.Type, crossings = seg.Crossings.ToArray() });
+                s.segments.Add(new SegmentSave
+                {
+                    id = seg.Id, a = seg.A, b = seg.B, type = seg.Type,
+                    crossings = seg.Crossings.ConvertAll(c => c.T).ToArray(),
+                    crossingKinds = seg.Crossings.ConvertAll(c => (int)c.Kind).ToArray()
+                });
             var usedCustom = new HashSet<string>();
             foreach (var b in g.City.Buildings.Values)
             {
@@ -112,12 +140,17 @@ namespace UKCity.Save
             var city = g.City;
             city.Clear();
             foreach (var n in s.nodes)
-                city.Nodes[n.id] = new RoadNode { Id = n.id, Pos = new Vector2(n.x, n.z), IsRoundabout = n.roundabout, RoundaboutRadius = n.radius };
+                city.Nodes[n.id] = new RoadNode { Id = n.id, Pos = new Vector2(n.x, n.z), IsRoundabout = n.roundabout, RoundaboutRadius = n.radius, Signals = n.signals, YellowBox = n.yellowBox };
             foreach (var seg in s.segments)
             {
                 if (!city.Nodes.ContainsKey(seg.a) || !city.Nodes.ContainsKey(seg.b)) continue;
                 var rs = new RoadSegment { Id = seg.id, A = seg.a, B = seg.b, Type = seg.type };
-                if (seg.crossings != null) rs.Crossings.AddRange(seg.crossings);
+                if (seg.crossings != null)
+                    for (int i = 0; i < seg.crossings.Length; i++)
+                    {
+                        var kind = seg.crossingKinds != null && i < seg.crossingKinds.Length ? (CrossingKind)seg.crossingKinds[i] : CrossingKind.Zebra;
+                        rs.Crossings.Add(new Crossing(seg.crossings[i], kind));
+                    }
                 city.Segments[rs.Id] = rs;
                 city.Nodes[seg.a].Segments.Add(rs.Id);
                 city.Nodes[seg.b].Segments.Add(rs.Id);
@@ -127,12 +160,12 @@ namespace UKCity.Save
             city.NextId = Math.Max(s.nextId, 1);
 
             g.World.Edits.Clear();
-            foreach (var e in s.edits) g.World.Edits.SetPacked(new ChunkCoord(e.cx, e.cz), e.packed);
+            foreach (var e in s.edits) g.World.Edits.SetPacked(new ChunkCoord(e.cx, e.cz), e.packed, s.version);
             g.World.Seed = s.seed;
             g.World.ResetAll();
 
             if (s.hotbar != null && s.hotbar.Length == g.Interactor.Hotbar.Length)
-                for (int i = 0; i < s.hotbar.Length; i++) g.Interactor.Hotbar[i] = (byte)s.hotbar[i];
+                for (int i = 0; i < s.hotbar.Length; i++) g.Interactor.Hotbar[i] = (ushort)s.hotbar[i];
 
             g.Player.Teleport(new Vector3(s.px, s.py, s.pz));
             g.Player.Yaw = s.yaw;

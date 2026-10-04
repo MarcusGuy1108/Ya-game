@@ -1,13 +1,13 @@
 # UK City (working title)
 
-A Minecraft-style block game for building British towns. Lay out roads, roundabouts and buildings quickly in a
-top-down **city planner**, then drop into **first person** to walk around and break or place blocks by hand,
-in the same world.
+A Minecraft-style block game for building British towns. Lay out roads, junctions, signals and buildings quickly in a
+top-down **city planner**, then drop into **first person** to walk around and break or place blocks by hand, in the
+same world.
 
-![Top-down render of the starter town](Docs/starter-town-map.png)
+![A signalised junction on the high street](Docs/view-junction.png)
 
-*The starter town, rendered headlessly from the real generator: an A-road with a roundabout, a high street with
-shops, a pub and a zebra crossing, residential streets of terraces and semis, a church, a tower block and a park.*
+*Every image here comes from a headless software render of the real chunk meshes and textures (the same code the
+game runs), not the Unity editor. Unity adds smoother texture filtering, but the geometry and artwork are identical.*
 
 ## Getting started
 
@@ -17,8 +17,8 @@ shops, a pub and a zebra crossing, residential streets of terraces and semis, a 
 3. When the editor opens, press **Play**. There's no scene to set up: the game builds itself from code in any
    scene, including the empty default one.
 
-The first launch drops you into the starter town. **F5** saves and **F9** loads, and the game also saves when you
-quit. To start again, press **Esc** and choose **New world** (starter town or empty).
+The first launch drops you onto the high street of the starter town. **F5** saves and **F9** loads, and the game also
+saves when you quit. To start again, press **Esc** and choose **New world** (starter town or empty).
 
 > Unity creates `.meta` files for every script and shader the first time it opens the project. Commit them.
 
@@ -31,11 +31,11 @@ quit. To start again, press **Esc** and choose **New world** (starter town or em
 | F | Toggle fly |
 | Shift | Sprint |
 | Ctrl | Descend while flying |
-| Left / right click | Break / place block |
+| Left / right click | Break / place block (signs and props face you; road markings point the way you look) |
 | Middle click | Pick the block you're looking at |
 | 1–9, scroll | Hotbar |
-| E | Block palette |
-| B | Building templates (place in 3D with a ghost preview, R to rotate) |
+| E | Block palette (tabs: nature, road, markings, building, street, signals, signs) |
+| B | Buildings, signs, gantries and street furniture (ghost preview, R to rotate) |
 | C, then C again | Capture the region between two corners as a new reusable template |
 | Tab | Switch to the city planner |
 
@@ -43,57 +43,108 @@ quit. To start again, press **Esc** and choose **New world** (starter town or em
 |---|---|
 | WASD / arrows, middle-drag | Pan |
 | Scroll | Zoom (towards the cursor) |
-| 1 Select | Click roads, junctions or buildings; drag junctions to reshape roads |
-| 2 Road | Click to start, click to add sections, right click to stop. Shift snaps angles. Crossing an existing road makes a junction |
-| 3 Roundabout | Mini (painted), small or large; click a junction, a road or empty ground |
-| 4 Zebra crossing | Click a road with pavements; Belisha beacons are added for you |
-| 5 Building | Pick a template; it turns to face the nearest road (R rotates) |
-| 6 Bulldoze | Remove junctions, roads, crossings and buildings |
+| 1 Select | Click roads, junctions or buildings; drag junctions to reshape roads; add signals or yellow boxes |
+| 2 Road | Click to start, click to add sections, right click to stop. Shift snaps angles. Crossing roads make junctions |
+| 3 Roundabout | Mini (painted), small or large |
+| 4 Crossing | Zebra or puffin (signal controlled); click an existing crossing to switch type |
+| 5 Signals | Click a junction to signalise it; Shift+click for a yellow box |
+| 6 Road sign | Pick from about 90 UK signs; it lands at the kerb facing oncoming traffic. Gantries span the motorway |
+| 7 Building | Pick a template; it turns to face the nearest road (R rotates) |
+| 8 Bulldoze | Remove junctions, roads, crossings, buildings and signs |
 | P | Walk here: drop into first person at the cursor |
 | G / H | Chunk grid / hide the road overlay |
-| Tab | Back to first person |
 
-F1 shows the controls in game. Esc opens the menu.
+F1 shows the controls in game. Esc opens the menu, which can also switch textures between smooth and pixel-crisp.
 
 ## What's in it
 
-- **Infinite, chunk-streamed voxel world** of 1 m blocks, generated and meshed on background threads, with ambient
+**World**
+- Infinite, chunk-streamed voxel world of 1 m blocks, generated and meshed on background threads, with ambient
   occlusion and face shading.
-- **UK road types**: residential street, A-road, high street (double yellow lines), dual carriageway (with a grass
-  central reservation) and country lane (verges and hedgerows). Dashed white centre lines, clean junction boxes,
-  automatic street lamps, zebra crossings with Belisha beacons, and mini, small and large roundabouts.
-- **19 building templates**: terraced house, terrace row, 1930s semis, corner shop, pub, council tower block, parish
-  church, pocket park, bus shelter, red phone box, pillar box, street lamp, traffic lights, Belisha beacon, give way,
-  30 and no-entry signs, street name plate and an oak tree. You can add your own with the capture tool.
-- **53 blocks**, all procedurally drawn pixel art (no image assets): brick, London stock brick, pebbledash,
-  render, slate, clay tiles, sash windows, coloured front doors, kerbs, paving slabs, road markings, signs and more.
+- Blocks have a facing and can be built from several boxes (like Minecraft block models), so signs are thin plates
+  on posts, signal heads have backing boards, and lamps, cameras and benches have real shapes.
+- 64 px textures, all painted procedurally at startup (no image assets) into a mip-mapped texture array so they stay
+  clean at a distance. Sign lettering uses an embedded distance-field font.
 
-![Block textures](Docs/block-textures.png)
+**Roads and junctions (UK rules, left-hand traffic)**
+- Road types: residential street, urban A-road, high street (double yellows), rural A-road, dual carriageway,
+  motorway (3 lanes, hard shoulder, concrete central barrier, crash barriers) and country lane (hedgerows).
+- Junctions get rounded kerbs automatically. Priority junctions put give way lines and triangles on the minor road.
+  Hazard warning centre lines appear on the approaches, and roundabouts get give way lines at every entry.
+- Signalised junctions get stop lines, lane arrows, studded pedestrian crossings with red tactile paving, primary
+  and secondary signal heads, and pedestrian signals with push buttons. A yellow box junction is optional.
+- Zebra crossings have stripes, zig-zags, give way lines and flashing Belisha beacons. Puffin crossings have studs,
+  stop lines and their own signal cycle.
+
+**Working signals and screens**
+- Traffic lights run the UK sequence (red, red+amber, green, amber) in stages, with an all-red pedestrian stage when
+  the green man shows. Heads work out which junction approach they control from where they stand and which way
+  they face. Any heads you place by hand away from a junction run a shared two-phase cycle.
+- Belisha beacons flash. So do school warning lights (alternating ambers) and vehicle-activated "30 / SLOW DOWN"
+  signs. Motorway message signs cycle through messages, and smart-motorway lane signals change speed limits and
+  close lanes.
+
+**Signs (about 90, all UK)**
+- Speed limits 20 to 70, the national speed limit, 20 zone, and end of zone.
+- Regulatory: stop, give way, no entry, no left/right/U-turn, no overtaking, weight limit, no waiting, clearway,
+  mandatory arrows, mini roundabout, one way, bus lane.
+- Warning: crossroads, T-junction, side road, staggered junction, roundabout, bends, road narrows, signals ahead,
+  pedestrian crossing, children, cycles, slippery road, humps, road works, deer, cattle, two-way traffic, queues,
+  uneven road, low bridge, falling rocks.
+- School: patrol, School plate, School Keep Clear, "20 when lights show", and a flashing school warning assembly.
+- Information and direction: parking, hospital, speed camera, bus stop, pedestrian zone, street name plates, local,
+  tourist and primary route signs, and a "Welcome to Brickton" sign.
+- Motorway: start/end of motorway, countdown markers, emergency area, route shield, an advance direction sign, and
+  gantries with lane destination signs or lane signals plus a message screen.
+
+![All the 1x1 signs](Docs/sheet-signs.png)
+![Multi-block signs](Docs/sheet-bigsigns.png)
+
+**Props**: speed camera, average speed camera, CCTV, classic and LED street lamps, bollards, keep-left bollards,
+pedestrian guard rail, iron railings, crash barrier, concrete barrier, litter bin, grit bin, street cabinet, traffic
+cones, roadworks barriers, bench, cycle stand, EV charger, emergency phone and marker posts.
+
+**Buildings**: terraced house and terrace row, 1930s semis, corner shop, The Red Lion pub, council tower block,
+parish church, pocket park, bus shelter, red phone box, pillar box and an oak tree. You can add your own with the
+capture tool.
+
+| | |
+|---|---|
+| ![High street](Docs/view-highstreet.png) | ![The Red Lion](Docs/view-pub.png) |
+| ![Roundabout entry](Docs/view-roundabout.png) | ![Motorway gantries](Docs/view-motorway.png) |
+| ![School warning](Docs/view-school.png) | ![Junction from above](Docs/map-junction.png) |
+
+![Block textures](Docs/sheet-blocks.png)
 
 ## How it fits together
 
 The world is built from three layers, applied in order every time a chunk generates:
 
 1. **Terrain**: flat English countryside with scattered oaks (`ChunkGenerator`).
-2. **City plan** (`CityLayer`): a road graph of nodes and segments plus placed building templates. The 2D planner
-   edits this layer, and it's rasterised into blocks: road cross-sections, markings, roundabouts, lamps and buildings.
+2. **City plan** (`CityLayer`): a road graph of nodes (junctions, roundabouts, signals) and segments (road type,
+   crossings), plus placed templates. `JunctionGeometry` turns it into markings, kerb corners and signal positions,
+   and the rasteriser writes them into blocks.
 3. **Hand edits** (`WorldEdits`): every block you place or break in first person, stored as a sparse per-chunk delta.
 
 Because the road network is a real graph rather than painted blocks, you can redraw a road without losing your hand
-building, and AI traffic will be able to path-find over the same graph later.
+building, and AI traffic will be able to path-find over the same graph (and obey the same signals) later.
 
 ```
 Assets/
   Scripts/
-    Core/     GameManager (modes, saving, actions), Bootstrap (auto-start), GameInput, LineBatch (overlays)
-    World/    Blocks, TextureAtlas, ChunkGenerator, ChunkMesher, VoxelWorld (streaming), WorldEdits, VoxelRaycast
-    City/     RoadTypes, CityLayer (road graph + buildings), BuildingTemplate, BuildingLibrary, StarterTown
-    Player/   PlayerController (voxel collision, fly), BlockInteractor (break/place, templates, capture)
-    Planner/  PlannerController (2D tools)
-    UI/       Hud (IMGUI)
-    Save/     SaveSystem (JSON in Application.persistentDataPath)
-  Resources/Shaders/   Unlit voxel, transparent, ghost and overlay shaders (work in Built-in and URP)
+    Core/       GameManager (modes, saving, actions), Bootstrap (auto-start), GameInput, LineBatch (overlays)
+    World/      BlockState (id + facing), Blocks (registry, box models), ChunkGenerator, ChunkMesher,
+                VoxelWorld (streaming), DynamicFaces (animated faces), TextureAtlas (texture array), WorldEdits
+    World/Art/  PixelCanvas (anti-aliased painter), Noise, SignFont (+ generated SDF data), BlockPainter, Signs
+    City/       RoadTypes, CityLayer, JunctionGeometry, TrafficSignals, SignPlacer, BuildingTemplate,
+                BuildingLibrary, StarterTown
+    Player/     PlayerController (voxel collision, fly), BlockInteractor (break/place, templates, capture)
+    Planner/    PlannerController (2D tools)
+    UI/         Hud (IMGUI)
+    Save/       SaveSystem (JSON in Application.persistentDataPath; v1 saves are migrated)
+  Resources/Shaders/   Unlit texture-array shaders (Built-in and URP), ghost and overlay shaders
 Tools/compile-check/   Compiles the scripts against Unity's reference assemblies without the editor
+Tools/fontgen/         Regenerates the sign font from a TTF
 ```
 
 To check the scripts compile without Unity (CI runs this too):
@@ -106,14 +157,16 @@ dotnet build Tools/compile-check -p:NewInput=true   # Input System path
 ## Roadmap
 
 - [x] Core loop: 2D road and city planner ↔ first-person block building in one world
-- [x] UK road types, markings, roundabouts, zebra crossings, street furniture
+- [x] UK road types, markings, roundabouts, zebra and puffin crossings, street furniture
 - [x] Building templates, placeable from 2D and 3D, plus capturing your own
-- [ ] Give-way and stop lines at junctions; traffic lights that cycle
-- [ ] Curved roads (Bézier) and one-way streets
-- [ ] AI traffic driving on the left, using the road graph (roundabouts clockwise, giving way)
-- [ ] Pedestrians on pavements and zebra crossings
+- [x] Rotatable blocks and box models; 64 px procedural textures; around 90 UK signs; motorway gantries
+- [x] Working traffic signals, pedestrian signals, flashing beacons, message signs and lane signals
+- [x] UK junction markings: give way, stop lines, triangles, hazard lines, zig-zags, yellow boxes, rounded kerbs
+- [ ] Curved roads (Bézier), slip roads and one-way streets
+- [ ] AI traffic driving on the left, obeying the signals and giving way (roundabouts clockwise)
+- [ ] Pedestrians on pavements, pressing buttons and using crossings
 - [ ] Buses with routes and stops
 - [ ] Day/night cycle with working street lamps
-- [ ] Opening doors, stairs and slab blocks, signs that face a direction
+- [ ] Opening doors, stairs and slab blocks
 - [ ] Undo/redo in the planner
 - [ ] Multiplayer (server-authoritative; plan edits and block edits are already separate, network-friendly actions)

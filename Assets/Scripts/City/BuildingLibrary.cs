@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UKCity.World;
+using UKCity.World.Art;
 
 namespace UKCity.City
 {
@@ -9,7 +10,7 @@ namespace UKCity.City
         public static readonly List<BuildingTemplate> All = new List<BuildingTemplate>();
         private static readonly Dictionary<string, BuildingTemplate> byId = new Dictionary<string, BuildingTemplate>();
 
-        public static readonly string[] Categories = { "Houses", "Shops & Pubs", "Civic", "Street", "Nature", "Custom" };
+        public static readonly string[] Categories = { "Houses", "Shops & Pubs", "Civic", "Street", "Signals", "Signs", "Motorway", "Nature", "Custom" };
 
         static BuildingLibrary()
         {
@@ -23,15 +24,11 @@ namespace UKCity.City
             Register(BusShelter());
             Register(PhoneBox());
             Register(PillarBox());
-            Register(StreetLamp());
-            Register(TrafficLights());
-            Register(BelishaBeacon());
-            Register(PostSign("sign_giveway", "Give Way Sign", BlockIds.SignGiveWay));
-            Register(PostSign("sign_30", "30 mph Sign", BlockIds.Sign30));
-            Register(PostSign("sign_noentry", "No Entry Sign", BlockIds.SignNoEntry));
-            Register(StreetNamePlate());
             Register(OakTree());
             Register(Park());
+            RegisterStreetFurniture();
+            RegisterSigns();
+            RegisterGantries();
         }
 
         public static void Register(BuildingTemplate t)
@@ -81,12 +78,12 @@ namespace UKCity.City
             b.Fill(X(3), 3, 5, X(3), 3, 7, BlockIds.Air);
 
             // Front: door + bay window downstairs, two sash windows upstairs.
-            b.Fill(X(1), 1, 2, X(1), 2, 2, BlockIds.DoorRed);
+            b.Door(X(1), 1, 2, BlockIds.DoorRed);
             b.Fill(X(3), 1, 2, X(3), 2, 2, BlockIds.Window);
             b.Set(X(1), 4, 2, BlockIds.Window); b.Set(X(1), 5, 2, BlockIds.Window);
             b.Set(X(3), 4, 2, BlockIds.Window); b.Set(X(3), 5, 2, BlockIds.Window);
             // Back.
-            b.Fill(X(1), 1, 9, X(1), 2, 9, BlockIds.DoorBlack);
+            b.Door(X(1), 1, 9, BlockIds.DoorBlack);
             b.Fill(X(3), 1, 9, X(3), 2, 9, BlockIds.Window);
             b.Fill(X(2), 4, 9, X(2), 5, 9, BlockIds.Window);
 
@@ -161,12 +158,12 @@ namespace UKCity.City
                 b.Set(X(5), 2, 8, BlockIds.Planks);
                 b.Fill(X(5), 3, 6, X(5), 3, 8, BlockIds.Air);
                 // Door, bay window, upstairs windows.
-                b.Fill(X(4), 1, 4, X(4), 2, 4, BlockIds.DoorRed);
+                b.Door(X(4), 1, 4, BlockIds.DoorRed);
                 b.Fill(X(1), 1, 4, X(2), 2, 4, BlockIds.Window);
                 b.Fill(X(1), 4, 4, X(2), 5, 4, BlockIds.Window);
                 b.Fill(X(4), 4, 4, X(4), 5, 4, BlockIds.Window);
                 b.Fill(X(2), 1, 11, X(3), 2, 11, BlockIds.Window);
-                b.Fill(X(5), 1, 11, X(5), 2, 11, BlockIds.DoorBlack);
+                b.Door(X(5), 1, 11, BlockIds.DoorBlack);
                 b.Fill(X(2), 4, 11, X(3), 5, 11, BlockIds.Window);
                 // Garden fence.
                 b.Fill(X(0), 1, 12, X(0), 1, 15, BlockIds.Planks);
@@ -190,7 +187,7 @@ namespace UKCity.City
             // Shopfront.
             b.Fill(0, 1, 0, 6, 2, 0, BlockIds.Shopfront);
             b.Fill(1, 1, 0, 4, 2, 0, BlockIds.Glass);
-            b.Fill(5, 1, 0, 5, 2, 0, BlockIds.DoorGreen);
+            b.Door(5, 1, 0, BlockIds.DoorGreen);
             b.Fill(0, 3, 0, 6, 3, 0, BlockIds.ShopSign);
             // Counter and shelves.
             b.Fill(1, 1, 6, 3, 1, 6, BlockIds.Planks);
@@ -220,8 +217,8 @@ namespace UKCity.City
             b.Walls(0, 1, 1, 10, 3, 12, BlockIds.Shopfront);
             b.Fill(1, 1, 1, 3, 2, 1, BlockIds.Window);
             b.Fill(7, 1, 1, 9, 2, 1, BlockIds.Window);
-            b.Fill(5, 1, 1, 5, 2, 1, BlockIds.DoorBlack);
-            b.Fill(0, 3, 1, 10, 3, 1, BlockIds.ShopSign);
+            b.Door(5, 1, 1, BlockIds.DoorBlack);
+            b.Fill(0, 3, 1, 10, 3, 1, BlockIds.PubFascia);
             // Upstairs: cream render.
             b.Fill(1, 4, 2, 9, 4, 11, BlockIds.Planks);
             b.Walls(0, 4, 1, 10, 7, 12, BlockIds.Render);
@@ -231,7 +228,7 @@ namespace UKCity.City
             b.Fill(2, 1, 11, 8, 2, 11, BlockIds.Planks);
             // Hanging sign on a bracket.
             b.Set(10, 5, 0, BlockIds.MetalBlack);
-            b.Set(10, 4, 0, BlockIds.ShopSign);
+            b.Set(10, 4, 0, BlockIds.PubBoard);
             b.GableRoofX(0, 10, 1, 12, 8, BlockIds.Slate, BlockIds.Render);
             b.Fill(1, 13, 6, 1, 14, 7, BlockIds.RedBrick);
             return b.Build("pub", "The Red Lion (Pub)", "Shops & Pubs", 5, 0,
@@ -267,7 +264,7 @@ namespace UKCity.City
             b.Fill(4, top + 1, 4, 8, top + 2, 8, BlockIds.Concrete); // lift motor room
             // Entrance.
             b.Fill(5, 1, 0, 7, 2, 0, BlockIds.Glass);
-            b.Fill(6, 1, 0, 6, 2, 0, BlockIds.DoorBlack);
+            b.Door(6, 1, 0, BlockIds.DoorBlack);
             return b.Build("tower_block", "Council Tower Block", "Civic", 6, 0,
                 "Twelve storeys of 1960s concrete. Fly up the stairwell.");
         }
@@ -303,7 +300,8 @@ namespace UKCity.City
             }
             // Tower with spire.
             b.Walls(3, 1, 2, 7, 14, 6, BlockIds.Stone);
-            b.Fill(5, 1, 2, 5, 3, 2, BlockIds.DoorBlack);
+            b.Door(5, 1, 2, BlockIds.DoorBlack);
+            b.Set(5, 3, 2, BlockIds.Window);
             b.Fill(5, 1, 6, 5, 3, 7, BlockIds.Air);
             b.Fill(5, 10, 2, 5, 12, 2, BlockIds.Window);
             b.Fill(3, 10, 4, 3, 12, 4, BlockIds.Window);
@@ -344,9 +342,11 @@ namespace UKCity.City
             b.Fill(0, 1, 1, 0, 2, 1, BlockIds.Glass);
             b.Fill(3, 1, 1, 3, 2, 1, BlockIds.Glass);
             b.Fill(0, 3, 0, 3, 3, 2, BlockIds.MetalGrey);
+            b.Set(1, 1, 1, BlockState.Make(BlockIds.Bench, 2));
+            b.Set(2, 1, 1, BlockState.Make(BlockIds.Bench, 2));
             b.Fill(4, 1, 0, 4, 2, 0, BlockIds.PoleGrey);
             b.Set(4, 3, 0, BlockIds.SignBusStop);
-            return b.Build("bus_shelter", "Bus Shelter + Stop", "Street", 2, 0, "Glass shelter with a bus stop flag.");
+            return b.Build("bus_shelter", "Bus Shelter + Stop", "Street", 2, 0, "Glass shelter with a bench and bus stop flag.");
         }
 
         private static BuildingTemplate PhoneBox()
@@ -359,50 +359,152 @@ namespace UKCity.City
 
         private static BuildingTemplate PillarBox()
         {
-            var b = new TemplateBuilder(1, 2, 1);
+            var b = new TemplateBuilder(1, 3, 1);
             b.Set(0, 1, 0, BlockIds.PostBox);
             return b.Build("pillar_box", "Pillar Box", "Street", 0, 0, "Royal Mail post box.");
         }
 
-        private static BuildingTemplate StreetLamp()
+        /// <summary>A pole of the given height with a head block on top, which may overhang to the front.</summary>
+        private static BuildingTemplate Mast(string id, string name, string cat, int poleHeight, ushort head, bool overhang, string desc)
         {
-            var b = new TemplateBuilder(1, 7, 2);
-            b.Fill(0, 1, 1, 0, 6, 1, BlockIds.PoleGrey);
-            b.Set(0, 6, 0, BlockIds.LampHead);
-            return b.Build("street_lamp", "Street Lamp", "Street", 0, 1, "Lamp column; the head overhangs the front.");
+            var b = new TemplateBuilder(1, poleHeight + 2, overhang ? 2 : 1);
+            int z = overhang ? 1 : 0;
+            b.Fill(0, 1, z, 0, poleHeight, z, BlockIds.PoleGrey);
+            b.Set(0, overhang ? poleHeight : poleHeight + 1, 0, head);
+            return b.Build(id, name, cat, 0, z, desc);
         }
 
-        private static BuildingTemplate TrafficLights()
+        private static BuildingTemplate Single(string id, string name, string cat, ushort block, string desc)
         {
-            var b = new TemplateBuilder(1, 4, 1);
-            b.Fill(0, 1, 0, 0, 2, 0, BlockIds.PoleBlack);
-            b.Set(0, 3, 0, BlockIds.TrafficLight);
-            return b.Build("traffic_lights", "Traffic Lights", "Street", 0, 0, "Static for now; they will cycle once traffic arrives.");
+            var b = new TemplateBuilder(1, 2, 1);
+            b.Set(0, 1, 0, block);
+            return b.Build(id, name, cat, 0, 0, desc);
         }
 
-        private static BuildingTemplate BelishaBeacon()
+        private static BuildingTemplate Run(string id, string name, string cat, int len, ushort block, string desc)
         {
-            var b = new TemplateBuilder(1, 4, 1);
-            b.Fill(0, 1, 0, 0, 2, 0, BlockIds.PoleStriped);
-            b.Set(0, 3, 0, BlockIds.Belisha);
-            return b.Build("belisha", "Belisha Beacon", "Street", 0, 0, "The flashing amber globe at a zebra crossing.");
+            var b = new TemplateBuilder(len, 2, 1);
+            b.Fill(0, 1, 0, len - 1, 1, 0, block);
+            return b.Build(id, name, cat, len / 2, 0, desc);
         }
 
-        private static BuildingTemplate PostSign(string id, string name, byte sign)
+        private static void RegisterStreetFurniture()
         {
-            var b = new TemplateBuilder(1, 4, 1);
-            b.Fill(0, 1, 0, 0, 2, 0, BlockIds.PoleGrey);
-            b.Set(0, 3, 0, sign);
-            return b.Build(id, name, "Street", 0, 0, "Sign on a post.");
+            Register(Mast("street_lamp", "Street Lamp (classic)", "Street", 6, BlockIds.LampHead, true, "Lamp column with an overhanging lantern."));
+            Register(Mast("street_lamp_led", "Street Lamp (LED)", "Street", 7, BlockIds.LampLed, true, "Modern LED column."));
+            Register(Mast("traffic_lights", "Traffic Signal", "Signals", 2, BlockIds.TrafficLight, false, "Vehicle signal head. Cycles on its own, or with the junction it stands at."));
+            var ped = new TemplateBuilder(1, 3, 1);
+            ped.Set(0, 1, 0, BlockIds.PushButton);
+            ped.Set(0, 2, 0, BlockIds.PedSignal);
+            Register(ped.Build("ped_signal", "Pedestrian Signal + Button", "Signals", 0, 0, "Red man / green man with a push button."));
+            var bel = new TemplateBuilder(1, 4, 1);
+            bel.Fill(0, 1, 0, 0, 2, 0, BlockIds.PoleStriped);
+            bel.Set(0, 3, 0, BlockIds.Belisha);
+            Register(bel.Build("belisha", "Belisha Beacon", "Signals", 0, 0, "Flashing amber globe for zebra crossings."));
+            Register(Mast("speed_camera", "Speed Camera", "Street", 3, BlockIds.SpeedCamera, false, "Yellow fixed speed camera on a pole."));
+            Register(Mast("avg_speed_camera", "Average Speed Camera", "Street", 5, BlockIds.AvgSpeedCamera, true, "Average speed (SPECS) camera on an arm."));
+            Register(Mast("cctv", "CCTV Camera", "Street", 5, BlockIds.Cctv, true, "Town centre CCTV."));
+            var vas = new TemplateBuilder(1, 3, 1);
+            vas.Set(0, 1, 0, BlockIds.PoleGrey);
+            vas.Set(0, 2, 0, BlockIds.Vas);
+            Register(vas.Build("vas", "Vehicle Activated Sign", "Signals", 0, 0, "Flashes 30 / SLOW DOWN."));
+            Register(Single("bollard", "Bollard", "Street", BlockIds.Bollard, "Black and white bollard."));
+            Register(Single("keep_left_bollard", "Keep Left Bollard", "Street", BlockIds.KeepLeftBollard, "Illuminated traffic island bollard."));
+            Register(Single("litter_bin", "Litter Bin", "Street", BlockIds.LitterBin, "Council litter bin."));
+            Register(Single("grit_bin", "Grit Bin", "Street", BlockIds.GritBin, "Yellow grit bin."));
+            Register(Single("cabinet", "Street Cabinet", "Street", BlockIds.Cabinet, "Green telecoms cabinet."));
+            Register(Single("bench", "Bench", "Street", BlockIds.Bench, "Wooden bench."));
+            Register(Single("cycle_stand", "Cycle Stand", "Street", BlockIds.CycleStand, "Sheffield stand."));
+            Register(Single("ev_charger", "EV Charger", "Street", BlockIds.EvCharger, "On-street charging point."));
+            Register(Single("sos_phone", "Emergency SOS Phone", "Motorway", BlockIds.SosPhone, "Orange motorway emergency telephone."));
+            Register(Single("marker_post", "Marker Post", "Motorway", BlockIds.MarkerPost, "Roadside marker post."));
+            Register(Run("guard_rail", "Guard Railing (4)", "Street", 4, BlockIds.GuardRail, "Pedestrian guard railing."));
+            Register(Run("railings", "Iron Railings (4)", "Street", 4, BlockIds.Railings, "Victorian iron railings."));
+            Register(Run("armco", "Crash Barrier (6)", "Motorway", 6, BlockIds.Armco, "Steel crash barrier."));
+            Register(Run("concrete_barrier", "Concrete Barrier (6)", "Motorway", 6, BlockIds.ConcreteBarrier, "Concrete step barrier."));
+            var rw = new TemplateBuilder(5, 2, 1);
+            rw.Set(0, 1, 0, BlockIds.TrafficCone);
+            rw.Set(4, 1, 0, BlockIds.TrafficCone);
+            rw.Fill(1, 1, 0, 3, 1, 0, BlockIds.RoadworksBarrier);
+            Register(rw.Build("roadworks", "Roadworks (barriers + cones)", "Street", 2, 0, "Red and white barriers with cones."));
+            Register(Single("cone", "Traffic Cone", "Street", BlockIds.TrafficCone, "Just the one."));
+
+            // School warning: flashing lights over the children sign and School plate.
+            var school = new TemplateBuilder(1, 6, 1);
+            school.Set(0, 1, 0, BlockIds.PoleGrey);
+            school.Set(0, 2, 0, (ushort)Signs.Get("plate_school").Parts[0, 0]);
+            school.Set(0, 3, 0, (ushort)Signs.Get("children").Parts[0, 0]);
+            school.Set(0, 4, 0, BlockIds.WigWag);
+            var st = school.Build("school_warning", "School Warning (flashing)", "Signs", 0, 0, "Children sign, School plate and flashing amber lights.");
+            st.IsSign = true; st.Group = "School"; st.IconTile = Blocks.Get(Signs.Get("children").Parts[0, 0]).IconTile;
+            Register(st);
         }
 
-        private static BuildingTemplate StreetNamePlate()
+        /// <summary>One placeable template per road sign: the sign on posts (or legs) facing the front.</summary>
+        private static void RegisterSigns()
         {
-            var b = new TemplateBuilder(3, 3, 1);
-            b.Set(0, 1, 0, BlockIds.PoleBlack);
-            b.Set(2, 1, 0, BlockIds.PoleBlack);
-            b.Fill(0, 2, 0, 2, 2, 0, BlockIds.SignStreet);
-            return b.Build("street_name", "Street Name Plate", "Street", 1, 0, "Black-and-white street name sign on legs.");
+            foreach (var s in Signs.All)
+            {
+                if (s.Mount == SignMount.Gantry) continue;
+                int post = s.PostHeight;
+                var b = new TemplateBuilder(s.W, post + s.H + 1, 1);
+                for (int y = 1; y <= post; y++)
+                {
+                    b.Set(0, y, 0, BlockIds.PoleGrey);
+                    if (s.W > 1) b.Set(s.W - 1, y, 0, BlockIds.PoleGrey);
+                }
+                for (int j = 0; j < s.H; j++)
+                    for (int i = 0; i < s.W; i++)
+                        b.Set(i, post + 1 + j, 0, (ushort)s.Parts[i, j]);
+                var t = b.Build("sign_" + s.Id, s.Name, "Signs", s.W / 2, 0, $"{s.Category} sign, {s.W}x{s.H} m.");
+                t.IsSign = true;
+                t.Group = s.Category;
+                t.IconTile = Blocks.Get(s.Parts[0, s.H - 1]).IconTile;
+                Register(t);
+            }
+        }
+
+        /// <summary>
+        /// Motorway gantries spanning one carriageway (20 m). Local x = 19 sits beside the central reservation, so the
+        /// gantry reaches out across the lanes to the verge at x = 0.
+        /// </summary>
+        private static void RegisterGantries()
+        {
+            Register(Gantry("gantry_smart", "Smart Motorway Gantry", b =>
+            {
+                foreach (int x in new[] { 16, 12, 8, 4 }) b.Set(x, 7, 0, BlockIds.LaneSignal);
+                var vms = Signs.Get("vms");
+                for (int i = 0; i < 3; i++) b.Set(13 + i, 8, 0, (ushort)vms.Parts[i, 0]);
+            }, "Lane signals over each lane plus a message sign."));
+            Register(Gantry("gantry_direction", "Direction Sign Gantry", b =>
+            {
+                int[] centres = { 16, 12, 8 };
+                for (int lane = 0; lane < 3; lane++)
+                {
+                    var sign = Signs.Get($"gantry_lane_{lane + 1}");
+                    for (int j = 0; j < sign.H; j++)
+                        for (int i = 0; i < sign.W; i++)
+                            b.Set(centres[lane] - 1 + i, 6 + j, 0, (ushort)sign.Parts[i, j]);
+                }
+            }, "Blue and green lane destination signs."));
+        }
+
+        private static BuildingTemplate Gantry(string id, string name, System.Action<TemplateBuilder> dress, string desc)
+        {
+            var b = new TemplateBuilder(20, 10, 2);
+            for (int y = 1; y <= 8; y++)
+            {
+                b.Set(0, y, 1, BlockIds.GantryLeg);
+                b.Set(19, y, 1, BlockIds.GantryLeg);
+            }
+            b.Fill(0, 9, 1, 19, 9, 1, BlockIds.GantryTruss);
+            b.Fill(1, 8, 1, 18, 8, 1, BlockIds.GantryTruss);
+            dress(b);
+            var t = b.Build(id, name, "Motorway", 19, 1, desc);
+            t.IsSign = true;
+            t.SpansCarriageway = true;
+            t.Group = "Motorway";
+            return t;
         }
 
         // ------------------------------------------------------------------ nature

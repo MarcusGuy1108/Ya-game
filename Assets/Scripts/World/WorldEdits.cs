@@ -10,31 +10,33 @@ namespace UKCity.World
     /// </summary>
     public sealed class WorldEdits
     {
-        private readonly Dictionary<ChunkCoord, Dictionary<int, byte>> map = new Dictionary<ChunkCoord, Dictionary<int, byte>>();
+        private readonly Dictionary<ChunkCoord, Dictionary<int, ushort>> map = new Dictionary<ChunkCoord, Dictionary<int, ushort>>();
 
-        public IEnumerable<KeyValuePair<ChunkCoord, Dictionary<int, byte>>> All => map;
+        public IEnumerable<KeyValuePair<ChunkCoord, Dictionary<int, ushort>>> All => map;
 
-        public void Set(int x, int y, int z, byte id)
+        public void Set(int x, int y, int z, ushort id)
         {
             var cc = ChunkCoord.FromBlock(x, z);
-            if (!map.TryGetValue(cc, out var d)) map[cc] = d = new Dictionary<int, byte>();
+            if (!map.TryGetValue(cc, out var d)) map[cc] = d = new Dictionary<int, ushort>();
             d[WorldConst.Index(x - cc.MinX, y, z - cc.MinZ)] = id;
         }
 
-        /// <summary>Packed (index &lt;&lt; 8 | block) copy for a worker thread, or null if no edits.</summary>
+        /// <summary>Packed (index &lt;&lt; 16 | block state) copy for a worker thread, or null if no edits.</summary>
         public int[] GetPacked(ChunkCoord cc)
         {
             if (!map.TryGetValue(cc, out var d) || d.Count == 0) return null;
             var arr = new int[d.Count];
             int i = 0;
-            foreach (var kv in d) arr[i++] = (kv.Key << 8) | kv.Value;
+            foreach (var kv in d) arr[i++] = (kv.Key << 16) | kv.Value;
             return arr;
         }
 
-        public void SetPacked(ChunkCoord cc, int[] packed)
+        public void SetPacked(ChunkCoord cc, int[] packed, int version = 2)
         {
-            var d = new Dictionary<int, byte>(packed.Length);
-            foreach (int e in packed) d[e >> 8] = (byte)(e & 0xFF);
+            var d = new Dictionary<int, ushort>(packed.Length);
+            // Version 1 saves packed a byte id in the low 8 bits.
+            if (version < 2) foreach (int e in packed) d[e >> 8] = (ushort)(e & 0xFF);
+            else foreach (int e in packed) d[e >> 16] = (ushort)(e & 0xFFFF);
             map[cc] = d;
         }
 

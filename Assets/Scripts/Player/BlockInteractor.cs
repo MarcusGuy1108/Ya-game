@@ -17,7 +17,7 @@ namespace UKCity.Player
         public GameManager Game;
         public PlayerController Player;
 
-        public readonly byte[] Hotbar =
+        public readonly ushort[] Hotbar =
         {
             BlockIds.RedBrick, BlockIds.YellowBrick, BlockIds.Window, BlockIds.DoorRed, BlockIds.Slate,
             BlockIds.Planks, BlockIds.Pavement, BlockIds.Asphalt, BlockIds.Glass
@@ -36,12 +36,13 @@ namespace UKCity.Player
         private readonly Dictionary<(string, int), Mesh> ghostMeshes = new Dictionary<(string, int), Mesh>();
         private Material ghostMat;
 
-        public byte SelectedBlock => Hotbar[Selected];
+        public ushort SelectedBlock => Hotbar[Selected];
 
         private void Start()
         {
             var shader = Shader.Find("UKCity/Ghost");
-            ghostMat = new Material(shader != null ? shader : Shader.Find("Unlit/Transparent")) { mainTexture = TextureAtlas.Texture };
+            ghostMat = new Material(shader != null ? shader : Shader.Find("Unlit/Transparent"));
+            ghostMat.SetTexture("_Tiles", TextureAtlas.Array);
             ghostMat.SetColor("_Color", new Color(0.7f, 1f, 0.7f, 0.55f));
         }
 
@@ -88,15 +89,11 @@ namespace UKCity.Player
             else if (placeNow && HasTarget)
             {
                 var p = Target.Adjacent;
-                byte id = SelectedBlock;
-                byte existing = Game.World.GetBlock(p.x, p.y, p.z);
+                ushort id = SelectedBlock;
+                ushort existing = Game.World.GetBlock(p.x, p.y, p.z);
                 bool replaceable = existing == BlockIds.Air || existing == BlockIds.Water;
                 if (replaceable && (!Blocks.Get(id).Solid || !Player.Overlaps(p)))
-                {
-                    // Directional road markings follow the way you're facing.
-                    id = OrientForPlayer(id);
-                    Game.World.SetBlock(p.x, p.y, p.z, id);
-                }
+                    Game.World.SetBlock(p.x, p.y, p.z, OrientForPlayer(id));
                 repeatTimer = 0.22f;
             }
 
@@ -105,21 +102,23 @@ namespace UKCity.Player
                 var def = Blocks.Get(Target.Id);
                 if (def.Placeable)
                 {
-                    int existing = System.Array.IndexOf(Hotbar, Target.Id);
+                    ushort id = (ushort)def.Id;
+                    int existing = System.Array.IndexOf(Hotbar, id);
                     if (existing >= 0) Selected = existing;
-                    else Hotbar[Selected] = Target.Id;
+                    else Hotbar[Selected] = id;
                 }
             }
         }
 
-        private byte OrientForPlayer(byte id)
+        /// <summary>Rotatable blocks face the player; road markings point the way the player is looking.</summary>
+        private ushort OrientForPlayer(ushort id)
         {
             var def = Blocks.Get(id);
-            if (def.Rotated90 == id) return id;
+            if (!def.Rotatable) return id;
             var f = Player.Cam.transform.forward;
-            bool facingX = Mathf.Abs(f.x) > Mathf.Abs(f.z);
-            bool isX = id == BlockIds.LineX || id == BlockIds.YellowX;
-            return facingX == isX ? id : def.Rotated90;
+            var look = new Vector2(f.x, f.z);
+            bool marking = def.Category == "Markings";
+            return BlockState.Make(def.Id, BlockState.FacingToward(marking ? look : -look));
         }
 
         // ------------------------------------------------------------------ templates
@@ -208,7 +207,8 @@ namespace UKCity.Player
             else if (HasTarget)
             {
                 var p = Target.Pos;
-                lines.WireBox(p - new Vector3(0.002f, 0.002f, 0.002f), p + new Vector3(1.002f, 1.002f, 1.002f), new Color(0, 0, 0, 0.8f));
+                var sb = Blocks.ShapeBounds(Target.Id);
+                lines.WireBox(p + sb.min - new Vector3(0.002f, 0.002f, 0.002f), p + sb.max + new Vector3(0.002f, 0.002f, 0.002f), new Color(0, 0, 0, 0.8f));
             }
 
             if (CaptureCorner.HasValue)
@@ -249,7 +249,7 @@ namespace UKCity.Player
                 for (int z = 0; z < size.z; z++)
                     for (int x = 0; x < size.x; x++)
                     {
-                        byte id = Game.World.GetBlock(min.x + x, min.y + y, min.z + z);
+                        ushort id = Game.World.GetBlock(min.x + x, min.y + y, min.z + z);
                         tb.Set(x, y, z, id == BlockIds.Unloaded ? BuildingTemplate.Keep : id);
                     }
             string name = $"Custom {System.DateTime.Now:HHmmss}";

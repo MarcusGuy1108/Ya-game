@@ -11,7 +11,21 @@ namespace UKCity.City
         public Vector2 Pos;
         public bool IsRoundabout;
         public float RoundaboutRadius;
+        /// <summary>Junction controlled by traffic lights.</summary>
+        public bool Signals;
+        /// <summary>Yellow box junction markings.</summary>
+        public bool YellowBox;
         public readonly List<int> Segments = new List<int>();
+    }
+
+    public enum CrossingKind : byte { Zebra, Signal }
+
+    public struct Crossing
+    {
+        /// <summary>Fraction (0..1) along the segment from A to B.</summary>
+        public float T;
+        public CrossingKind Kind;
+        public Crossing(float t, CrossingKind kind) { T = t; Kind = kind; }
     }
 
     public sealed class RoadSegment
@@ -19,8 +33,7 @@ namespace UKCity.City
         public int Id;
         public int A, B;
         public int Type;
-        /// <summary>Zebra crossings, stored as a fraction (0..1) along the segment from A to B.</summary>
-        public readonly List<float> Crossings = new List<float>();
+        public readonly List<Crossing> Crossings = new List<Crossing>();
         public RoadType RoadType => RoadTypes.Get(Type);
     }
 
@@ -136,10 +149,10 @@ namespace UKCity.City
             b.Segments.Remove(segId);
             var s1 = new RoadSegment { Id = NextId++, A = s.A, B = n.Id, Type = s.Type };
             var s2 = new RoadSegment { Id = NextId++, A = n.Id, B = s.B, Type = s.Type };
-            foreach (float c in crossings)
+            foreach (var c in crossings)
             {
-                if (c < t) s1.Crossings.Add(c / Mathf.Max(t, 0.0001f));
-                else s2.Crossings.Add((c - t) / Mathf.Max(1 - t, 0.0001f));
+                if (c.T < t) s1.Crossings.Add(new Crossing(c.T / Mathf.Max(t, 0.0001f), c.Kind));
+                else s2.Crossings.Add(new Crossing((c.T - t) / Mathf.Max(1 - t, 0.0001f), c.Kind));
             }
             foreach (var ns in new[] { s1, s2 })
             {
@@ -168,10 +181,49 @@ namespace UKCity.City
             Raise(Union(before, NodeArea(s.A, s.B)));
         }
 
-        public void AddCrossing(int segId, float frac)
+        public void AddCrossing(int segId, float frac, CrossingKind kind = CrossingKind.Zebra)
         {
             if (!Segments.TryGetValue(segId, out var s)) return;
-            s.Crossings.Add(Mathf.Clamp01(frac));
+            s.Crossings.Add(new Crossing(Mathf.Clamp01(frac), kind));
+            Raise(SegmentArea(s));
+        }
+
+        public void SetSignals(int nodeId, bool on)
+        {
+            if (!Nodes.TryGetValue(nodeId, out var n)) return;
+            n.Signals = on;
+            if (!on) n.YellowBox = false;
+            RaiseAround(nodeId);
+        }
+
+        public void SetYellowBox(int nodeId, bool on)
+        {
+            if (!Nodes.TryGetValue(nodeId, out var n)) return;
+            n.YellowBox = on;
+            RaiseAround(nodeId);
+        }
+
+        /// <summary>Finds the crossing nearest p (within radius). Returns false if none.</summary>
+        public bool FindCrossing(Vector2 p, float radius, out int segId, out int index)
+        {
+            segId = 0; index = -1;
+            float best = radius;
+            foreach (var s in Segments.Values)
+                for (int i = 0; i < s.Crossings.Count; i++)
+                {
+                    float d = Vector2.Distance(CrossingPos(s, s.Crossings[i].T), p);
+                    if (d <= best) { best = d; segId = s.Id; index = i; }
+                }
+            return index >= 0;
+        }
+
+        /// <summary>Switches a crossing between zebra and signal-controlled (puffin).</summary>
+        public void ToggleCrossingKind(int segId, int index)
+        {
+            if (!Segments.TryGetValue(segId, out var s) || index < 0 || index >= s.Crossings.Count) return;
+            var c = s.Crossings[index];
+            c.Kind = c.Kind == CrossingKind.Zebra ? CrossingKind.Signal : CrossingKind.Zebra;
+            s.Crossings[index] = c;
             Raise(SegmentArea(s));
         }
 
@@ -181,7 +233,7 @@ namespace UKCity.City
             {
                 for (int i = 0; i < s.Crossings.Count; i++)
                 {
-                    if (Vector2.Distance(CrossingPos(s, s.Crossings[i]), p) <= radius)
+                    if (Vector2.Distance(CrossingPos(s, s.Crossings[i].T), p) <= radius)
                     {
                         s.Crossings.RemoveAt(i);
                         Raise(SegmentArea(s));
@@ -327,11 +379,11 @@ namespace UKCity.City
             return new RectInt(x0, z0, x1 - x0, z1 - z0);
         }
 
-        private RectInt SegmentArea(RoadSegment s)
+        public RectInt SegmentArea(RoadSegment s)
         {
             var a = Nodes[s.A].Pos;
             var b = Nodes[s.B].Pos;
-            float m = s.RoadType.MaxHalf + 3;
+            float m = s.RoadType.MaxHalf + 4;
             int x0 = Mathf.FloorToInt(Mathf.Min(a.x, b.x) - m), z0 = Mathf.FloorToInt(Mathf.Min(a.y, b.y) - m);
             int x1 = Mathf.CeilToInt(Mathf.Max(a.x, b.x) + m), z1 = Mathf.CeilToInt(Mathf.Max(a.y, b.y) + m);
             return new RectInt(x0, z0, x1 - x0, z1 - z0);
@@ -339,7 +391,7 @@ namespace UKCity.City
 
         private RectInt NodeOnlyArea(RoadNode n)
         {
-            float r = (n.IsRoundabout ? n.RoundaboutRadius : 0) + 5;
+            float r = (n.IsRoundabout ? n.RoundaboutRadius : 0) + 30;
             return new RectInt(Mathf.FloorToInt(n.Pos.x - r), Mathf.FloorToInt(n.Pos.y - r), Mathf.CeilToInt(r * 2) + 1, Mathf.CeilToInt(r * 2) + 1);
         }
 
@@ -388,14 +440,15 @@ namespace UKCity.City
                 var type = s.RoadType;
                 float len = Vector2.Distance(na.Pos, nb.Pos);
                 var crossings = new float[s.Crossings.Count];
-                for (int i = 0; i < crossings.Length; i++) crossings[i] = s.Crossings[i] * len;
+                var kinds = new CrossingKind[s.Crossings.Count];
+                for (int i = 0; i < crossings.Length; i++) { crossings[i] = s.Crossings[i].T * len; kinds[i] = s.Crossings[i].Kind; }
                 segs.Add(new SegmentData
                 {
                     A = na.Pos, B = nb.Pos, Type = type,
                     SmoothA = IsSmoothEnd(s.A), SmoothB = IsSmoothEnd(s.B),
-                    Crossings = crossings
+                    Crossings = crossings, CrossingKinds = kinds
                 });
-                AddProps(s, na, nb, type, len, crossings, props);
+                AddLamps(s, na, nb, type, len, props);
             }
             snap.Segments = segs.ToArray();
 
@@ -404,6 +457,14 @@ namespace UKCity.City
                 if (n.IsRoundabout && NodeOnlyArea(n).Overlaps(area))
                     rbs.Add(new RoundaboutData { Centre = n.Pos, Radius = n.RoundaboutRadius });
             snap.Roundabouts = rbs.ToArray();
+
+            var geo = new JunctionGeometry(this);
+            geo.Build(area);
+            snap.Transverse = geo.Transverse.ToArray();
+            snap.Points = geo.Points.ToArray();
+            snap.Corners = geo.Corners.ToArray();
+            snap.Discs = geo.Discs.ToArray();
+            props.AddRange(geo.Props);
 
             var props2 = new List<PropData>();
             foreach (var p in props)
@@ -425,54 +486,41 @@ namespace UKCity.City
             return snap;
         }
 
-        private void AddProps(RoadSegment s, RoadNode na, RoadNode nb, RoadType type, float len, float[] crossings, List<PropData> props)
+        private void AddLamps(RoadSegment s, RoadNode na, RoadNode nb, RoadType type, float len, List<PropData> props)
         {
-            if (len < 1f) return;
+            if (len < 1f || type.LampOffset <= 0) return;
             var dir = (nb.Pos - na.Pos) / len;
             var perp = new Vector2(-dir.y, dir.x);
-
             // Street lamps, staggered on alternate sides, kept clear of junctions.
-            if (type.LampOffset > 0)
+            float startMargin = EndMargin(na), endMargin = EndMargin(nb);
+            int i = 0;
+            for (float along = startMargin; along <= len - endMargin; along += type.LampSpacing * 0.5f, i++)
             {
-                float startMargin = EndMargin(na), endMargin = EndMargin(nb);
-                int i = 0;
-                for (float along = startMargin; along <= len - endMargin; along += type.LampSpacing * 0.5f, i++)
+                float side = (i % 2 == 0) ? 1f : -1f;
+                var pos = na.Pos + dir * along + perp * (side * type.LampOffset);
+                var toRoad = -perp * side;
+                var arm = Mathf.Abs(toRoad.x) >= Mathf.Abs(toRoad.y)
+                    ? new Vector2Int(toRoad.x > 0 ? 1 : -1, 0)
+                    : new Vector2Int(0, toRoad.y > 0 ? 1 : -1);
+                props.Add(new PropData
                 {
-                    float side = (i % 2 == 0) ? 1f : -1f;
-                    var pos = na.Pos + dir * along + perp * (side * type.LampOffset);
-                    var toRoad = -perp * side;
-                    var arm = Mathf.Abs(toRoad.x) >= Mathf.Abs(toRoad.y)
-                        ? new Vector2Int(toRoad.x > 0 ? 1 : -1, 0)
-                        : new Vector2Int(0, toRoad.y > 0 ? 1 : -1);
-                    props.Add(new PropData { X = Mathf.FloorToInt(pos.x), Z = Mathf.FloorToInt(pos.y), Kind = PropKind.Lamp, Arm = arm });
-                }
-            }
-
-            // Belisha beacons either side of every zebra crossing.
-            if (type.HasPavement)
-            {
-                foreach (float c in crossings)
-                {
-                    for (int side = -1; side <= 1; side += 2)
-                    {
-                        var pos = na.Pos + dir * c + perp * (side * (type.CarriageHalf + 1.5f)) + dir * 2f;
-                        props.Add(new PropData { X = Mathf.FloorToInt(pos.x), Z = Mathf.FloorToInt(pos.y), Kind = PropKind.Belisha });
-                    }
-                }
+                    X = Mathf.FloorToInt(pos.x), Z = Mathf.FloorToInt(pos.y), Kind = PropKind.Lamp, Arm = arm,
+                    Facing = World.BlockState.FacingToward(new Vector2(arm.x, arm.y))
+                });
             }
         }
 
         private float EndMargin(RoadNode n)
         {
             if (n.IsRoundabout) return n.RoundaboutRadius + 6;
-            if (n.Segments.Count >= 3) return 12;
+            if (n.Segments.Count >= 3) return n.Signals ? 22 : 12;
             return 5;
         }
     }
 
     // ------------------------------------------------------------------ immutable snapshot types
 
-    public enum PropKind : byte { Lamp, Belisha }
+    public enum PropKind : byte { Lamp, Belisha, SignalHead, PedHead }
 
     public struct SegmentData
     {
@@ -481,12 +529,48 @@ namespace UKCity.City
         public bool SmoothA, SmoothB;
         /// <summary>Distances along the segment from A.</summary>
         public float[] Crossings;
+        public CrossingKind[] CrossingKinds;
     }
 
     public struct RoundaboutData
     {
         public Vector2 Centre;
         public float Radius;
+    }
+
+    /// <summary>A marking or surface strip laid across a road (give way, stop line, studs, tactile paving).</summary>
+    public struct TransverseData
+    {
+        /// <summary>Point on the road centre line where the strip sits.</summary>
+        public Vector2 P;
+        /// <summary>Direction of travel (unit). Lateral is measured to the left of it.</summary>
+        public Vector2 Dir;
+        public float LatFrom, LatTo, HalfLen;
+        public MarkingKind Mark;
+        /// <summary>Surface override instead of a marking (e.g. tactile paving on the footway).</summary>
+        public SurfaceKind Surface;
+    }
+
+    /// <summary>A single-block marking such as a give way triangle or lane arrow.</summary>
+    public struct PointMarkData
+    {
+        public Vector2 P, Dir;
+        public MarkingKind Mark;
+    }
+
+    /// <summary>Rounded kerb at a junction corner between two roads.</summary>
+    public struct CornerData
+    {
+        public Vector2 Node, Na, Nb;
+        public float Ha, Hb, R, Pw;
+        public SurfaceKind KerbKind, OuterKind;
+    }
+
+    public struct DiscData
+    {
+        public Vector2 C;
+        public float R;
+        public MarkingKind Mark;
     }
 
     public struct PlacementData
@@ -502,6 +586,7 @@ namespace UKCity.City
     {
         public int X, Z;
         public PropKind Kind;
+        public int Facing;
         public Vector2Int Arm;
     }
 
@@ -512,5 +597,9 @@ namespace UKCity.City
         public RoundaboutData[] Roundabouts = Array.Empty<RoundaboutData>();
         public PlacementData[] Buildings = Array.Empty<PlacementData>();
         public PropData[] Props = Array.Empty<PropData>();
+        public TransverseData[] Transverse = Array.Empty<TransverseData>();
+        public PointMarkData[] Points = Array.Empty<PointMarkData>();
+        public CornerData[] Corners = Array.Empty<CornerData>();
+        public DiscData[] Discs = Array.Empty<DiscData>();
     }
 }

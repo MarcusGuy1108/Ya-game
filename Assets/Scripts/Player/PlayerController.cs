@@ -139,6 +139,8 @@ namespace UKCity.Player
 
         // ------------------------------------------------------------------ collision
 
+        private readonly System.Collections.Generic.List<Bounds> boxes = new System.Collections.Generic.List<Bounds>();
+
         public bool Collides(Vector3 feet)
         {
             var min = new Vector3(feet.x - HalfWidth, feet.y, feet.z - HalfWidth);
@@ -147,11 +149,13 @@ namespace UKCity.Player
                 for (int z = Mathf.FloorToInt(min.z); z <= Mathf.FloorToInt(max.z - 0.001f); z++)
                     for (int x = Mathf.FloorToInt(min.x); x <= Mathf.FloorToInt(max.x - 0.001f); x++)
                     {
-                        byte b = World.GetBlock(x, y, z);
+                        ushort b = World.GetBlock(x, y, z);
                         if (!Blocks.IsSolidForPhysics(b)) continue;
-                        GetBox(b, x, y, z, out var bmin, out var bmax);
-                        if (min.x < bmax.x && max.x > bmin.x && min.y < bmax.y && max.y > bmin.y && min.z < bmax.z && max.z > bmin.z)
-                            return true;
+                        boxes.Clear();
+                        Blocks.CollisionBoxes(b, x, y, z, boxes);
+                        foreach (var bb in boxes)
+                            if (min.x < bb.max.x && max.x > bb.min.x && min.y < bb.max.y && max.y > bb.min.y && min.z < bb.max.z && max.z > bb.min.z)
+                                return true;
                     }
             return false;
         }
@@ -163,19 +167,6 @@ namespace UKCity.Player
             return cell.x + 1 > p.x - HalfWidth && cell.x < p.x + HalfWidth &&
                    cell.z + 1 > p.z - HalfWidth && cell.z < p.z + HalfWidth &&
                    cell.y + 1 > p.y && cell.y < p.y + Height;
-        }
-
-        private static void GetBox(byte id, int x, int y, int z, out Vector3 min, out Vector3 max)
-        {
-            if (id == BlockIds.Unloaded)
-            {
-                min = new Vector3(x, y, z);
-                max = min + Vector3.one;
-                return;
-            }
-            var d = Blocks.Defs[id];
-            min = new Vector3(x + d.MinX, y + d.MinY, z + d.MinZ);
-            max = new Vector3(x + d.MaxX, y + d.MaxY, z + d.MaxZ);
         }
 
         /// <summary>Moves along one axis, stopping at the first solid block. Returns the distance actually moved.</summary>
@@ -194,19 +185,25 @@ namespace UKCity.Player
                 for (int z = Mathf.FloorToInt(smin.z); z <= Mathf.FloorToInt(smax.z); z++)
                     for (int x = Mathf.FloorToInt(smin.x); x <= Mathf.FloorToInt(smax.x); x++)
                     {
-                        byte b = World.GetBlock(x, y, z);
+                        ushort b = World.GetBlock(x, y, z);
                         if (!Blocks.IsSolidForPhysics(b)) continue;
-                        GetBox(b, x, y, z, out var bmin, out var bmax);
-                        // Must overlap on the other two axes.
-                        bool overlap = true;
-                        for (int a = 0; a < 3 && overlap; a++)
+                        boxes.Clear();
+                        Blocks.CollisionBoxes(b, x, y, z, boxes);
+                        foreach (var bb in boxes)
                         {
-                            if (a == axis) continue;
-                            if (!(min[a] < bmax[a] - eps && max[a] > bmin[a] + eps)) overlap = false;
+                            var bmin = bb.min;
+                            var bmax = bb.max;
+                            // Must overlap on the other two axes.
+                            bool overlap = true;
+                            for (int a = 0; a < 3 && overlap; a++)
+                            {
+                                if (a == axis) continue;
+                                if (!(min[a] < bmax[a] - eps && max[a] > bmin[a] + eps)) overlap = false;
+                            }
+                            if (!overlap) continue;
+                            if (delta > 0 && bmin[axis] >= max[axis] - eps) delta = Mathf.Min(delta, Mathf.Max(0f, bmin[axis] - max[axis] - eps));
+                            else if (delta < 0 && bmax[axis] <= min[axis] + eps) delta = Mathf.Max(delta, Mathf.Min(0f, bmax[axis] - min[axis] + eps));
                         }
-                        if (!overlap) continue;
-                        if (delta > 0 && bmin[axis] >= max[axis] - eps) delta = Mathf.Min(delta, Mathf.Max(0f, bmin[axis] - max[axis] - eps));
-                        else if (delta < 0 && bmax[axis] <= min[axis] + eps) delta = Mathf.Max(delta, Mathf.Min(0f, bmax[axis] - min[axis] + eps));
                     }
             if (Mathf.Abs(delta) < eps * 0.5f) delta = 0;
             pos[axis] += delta;

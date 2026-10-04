@@ -21,7 +21,8 @@ namespace UKCity.UI
         private float scale = 1f;
         private float W, H;
         private readonly List<Rect> uiRects = new List<Rect>();
-        private Vector2 blockScroll, templateScroll, plannerScroll;
+        private Vector2 blockScroll, templateScroll, plannerScroll, signScroll;
+        private int blockTab;
         private string hotbarTooltip;
 
         private GUIStyle panel, title, label, small, button, selected, toast, slotNumber, centre;
@@ -87,11 +88,17 @@ namespace UKCity.UI
             GUI.color = old;
         }
 
-        private static void Icon(Rect r, byte id)
+        private static void Icon(Rect r, ushort id)
         {
             var def = Blocks.Get(id);
             if (!def.Visible) return;
-            GUI.DrawTextureWithTexCoords(r, TextureAtlas.Texture, TextureAtlas.TileRect(def.TileSide));
+            TileIcon(r, def.IconTile);
+        }
+
+        private static void TileIcon(Rect r, int tile)
+        {
+            if (tile < 0) return;
+            GUI.DrawTextureWithTexCoords(r, TextureAtlas.Icons, TextureAtlas.IconRect(tile));
         }
 
         private bool Button(Rect r, string text, bool isSelected = false) => GUI.Button(r, text, isSelected ? selected : button);
@@ -185,50 +192,42 @@ namespace UKCity.UI
 
         private void BlocksPanel()
         {
-            var r = Box(new Rect(W / 2 - 380, H / 2 - 260, 760, 470));
-            GUI.Label(new Rect(r.x + 12, r.y + 8, 500, 24), "Blocks", title);
-            GUI.Label(new Rect(r.x + 12, r.y + 32, 736, 20), "Pick a hotbar slot below, then click a block to put it there. E or Esc to close.", small);
+            var r = Box(new Rect(W / 2 - 400, H / 2 - 280, 800, 500));
+            GUI.Label(new Rect(r.x + 12, r.y + 8, 300, 24), "Blocks", title);
+            GUI.Label(new Rect(r.x + 12, r.y + 32, 776, 20), "Pick a hotbar slot below, then click a block to put it there. Signs and props face you when placed. E or Esc to close.", small);
+            var cats = Blocks.Categories;
+            for (int i = 0; i < cats.Length; i++)
+                if (Button(new Rect(r.x + 10 + i * 112, r.y + 56, 108, 26), cats[i], blockTab == i)) { blockTab = i; blockScroll = Vector2.zero; }
+
             hotbarTooltip = null;
-            var view = new Rect(r.x + 10, r.y + 56, 740, 404);
-            const int cell = 52;
-            int perRow = 13;
-            float contentH = 0;
-            foreach (var cat in Blocks.Categories)
+            var view = new Rect(r.x + 10, r.y + 90, 780, 400);
+            const int cell = 56;
+            int perRow = 13, count = 0;
+            string cat = cats[blockTab];
+            foreach (var d in Blocks.All) if (d.Placeable && d.Category == cat) count++;
+            blockScroll = GUI.BeginScrollView(view, blockScroll, new Rect(0, 0, 760, Mathf.Ceil(count / (float)perRow) * cell));
+            int k = 0;
+            foreach (var d in Blocks.All)
             {
-                int n = 0;
-                foreach (var d in Blocks.All) if (d.Placeable && d.Category == cat) n++;
-                contentH += 26 + Mathf.Ceil(n / (float)perRow) * cell + 6;
-            }
-            blockScroll = GUI.BeginScrollView(view, blockScroll, new Rect(0, 0, 720, contentH));
-            float y = 0;
-            foreach (var cat in Blocks.Categories)
-            {
-                GUI.Label(new Rect(0, y, 300, 22), cat, label);
-                y += 26;
-                int i = 0;
-                foreach (var d in Blocks.All)
-                {
-                    if (!d.Placeable || d.Category != cat) continue;
-                    var cr = new Rect((i % perRow) * cell, y + (i / perRow) * cell, cell - 4, cell - 4);
-                    Fill(cr, new Color(0.22f, 0.22f, 0.25f));
-                    Icon(new Rect(cr.x + 4, cr.y + 4, cr.width - 8, cr.height - 8), d.Id);
-                    if (GUI.Button(cr, new GUIContent("", d.Name), GUIStyle.none)) Game.Interactor.Hotbar[Game.Interactor.Selected] = d.Id;
-                    i++;
-                }
-                y += Mathf.Ceil(i / (float)perRow) * cell + 6;
+                if (!d.Placeable || d.Category != cat) continue;
+                var cr = new Rect((k % perRow) * cell, (k / perRow) * cell, cell - 4, cell - 4);
+                Fill(cr, new Color(0.22f, 0.22f, 0.25f));
+                Icon(new Rect(cr.x + 3, cr.y + 3, cr.width - 6, cr.height - 6), (ushort)d.Id);
+                if (GUI.Button(cr, new GUIContent("", d.Name), GUIStyle.none)) Game.Interactor.Hotbar[Game.Interactor.Selected] = (ushort)d.Id;
+                k++;
             }
             GUI.EndScrollView();
             if (!string.IsNullOrEmpty(GUI.tooltip)) hotbarTooltip = GUI.tooltip;
             if (hotbarTooltip != null)
-                GUI.Label(new Rect(r.x + 400, r.y + 8, 350, 24), hotbarTooltip, title);
+                GUI.Label(new Rect(r.x + 330, r.y + 8, 460, 24), hotbarTooltip, title);
         }
 
         private void BuildingsPanel()
         {
             var r = Box(new Rect(W / 2 - 300, H / 2 - 260, 600, 520));
-            GUI.Label(new Rect(r.x + 12, r.y + 8, 500, 24), "Buildings & Street Furniture", title);
+            GUI.Label(new Rect(r.x + 12, r.y + 8, 500, 24), "Buildings, Signs & Street Furniture", title);
             GUI.Label(new Rect(r.x + 12, r.y + 32, 576, 20), "Click one, then left click in the world to place it. B or Esc to close.", small);
-            string picked = TemplateList(new Rect(r.x + 10, r.y + 56, 580, 454), ref templateScroll, Game.Interactor.ActiveTemplate);
+            string picked = TemplateList(new Rect(r.x + 10, r.y + 56, 580, 454), ref templateScroll, Game.Interactor.ActiveTemplate, t => true);
             if (picked != null)
             {
                 Game.Interactor.BeginTemplate(picked);
@@ -236,36 +235,44 @@ namespace UKCity.UI
             }
         }
 
-        /// <summary>Scrollable template list. Returns the id clicked this frame, if any.</summary>
-        private string TemplateList(Rect view, ref Vector2 scroll, string current)
+        /// <summary>Scrollable template list grouped by category (and sign group). Returns the id clicked, if any.</summary>
+        private string TemplateList(Rect view, ref Vector2 scroll, string current, System.Func<BuildingTemplate, bool> filter)
         {
             string picked = null;
-            float contentH = 0;
+            var rows = new List<(string header, BuildingTemplate t)>();
             foreach (var cat in BuildingLibrary.Categories)
             {
-                int n = 0;
-                foreach (var t in BuildingLibrary.All) if (t.Category == cat) n++;
-                if (n > 0) contentH += 24 + n * 44;
-            }
-            scroll = GUI.BeginScrollView(view, scroll, new Rect(0, 0, view.width - 20, contentH));
-            float y = 0;
-            foreach (var cat in BuildingLibrary.Categories)
-            {
-                bool any = false;
-                foreach (var t in BuildingLibrary.All) if (t.Category == cat) { any = true; break; }
-                if (!any) continue;
-                GUI.Label(new Rect(0, y, 300, 22), cat, label);
-                y += 24;
+                string lastGroup = null;
+                bool header = false;
                 foreach (var t in BuildingLibrary.All)
                 {
-                    if (t.Category != cat) continue;
-                    var br = new Rect(0, y, view.width - 24, 40);
-                    if (Button(br, "", t.Id == current)) picked = t.Id;
-                    GUI.Label(new Rect(br.x + 8, br.y + 2, br.width - 100, 20), t.Name, t.Id == current ? new GUIStyle(label) { normal = { textColor = Color.black } } : label);
-                    GUI.Label(new Rect(br.x + 8, br.y + 20, br.width - 100, 18), t.Description, small);
-                    GUI.Label(new Rect(br.xMax - 90, br.y + 10, 86, 20), $"{t.SizeX}x{t.SizeZ}x{t.SizeY}", small);
-                    y += 44;
+                    if (t.Category != cat || !filter(t)) continue;
+                    if (!header) { rows.Add((cat, null)); header = true; }
+                    if (!string.IsNullOrEmpty(t.Group) && t.Group != lastGroup && t.Group != cat) { rows.Add(("  " + t.Group, null)); lastGroup = t.Group; }
+                    rows.Add((null, t));
                 }
+            }
+            float contentH = 0;
+            foreach (var row in rows) contentH += row.t == null ? 24 : 44;
+            scroll = GUI.BeginScrollView(view, scroll, new Rect(0, 0, view.width - 20, contentH));
+            float y = 0;
+            foreach (var (header, t) in rows)
+            {
+                if (t == null)
+                {
+                    GUI.Label(new Rect(0, y, 300, 22), header, label);
+                    y += 24;
+                    continue;
+                }
+                var br = new Rect(0, y, view.width - 24, 40);
+                if (Button(br, "", t.Id == current)) picked = t.Id;
+                if (t.IconTile >= 0) TileIcon(new Rect(br.x + 4, br.y + 4, 32, 32), t.IconTile);
+                float tx = t.IconTile >= 0 ? 42 : 8;
+                var nameStyle = t.Id == current ? new GUIStyle(label) { normal = { textColor = Color.black } } : label;
+                GUI.Label(new Rect(br.x + tx, br.y + 2, br.width - 100 - tx, 20), t.Name, nameStyle);
+                GUI.Label(new Rect(br.x + tx, br.y + 20, br.width - 100 - tx, 18), t.Description, small);
+                GUI.Label(new Rect(br.xMax - 90, br.y + 10, 86, 20), $"{t.SizeX}x{t.SizeZ}x{t.SizeY}", small);
+                y += 44;
             }
             GUI.EndScrollView();
             return picked;
@@ -273,7 +280,7 @@ namespace UKCity.UI
 
         private void PausePanel()
         {
-            var r = Box(new Rect(W / 2 - 150, H / 2 - 200, 300, 400));
+            var r = Box(new Rect(W / 2 - 150, H / 2 - 220, 300, 442));
             GUI.Label(new Rect(r.x + 12, r.y + 10, 276, 26), "Paused", title);
             float y = r.y + 46;
             if (Button(new Rect(r.x + 20, y, 260, 34), "Resume")) Open = Panel.None;
@@ -285,6 +292,8 @@ namespace UKCity.UI
             if (Button(new Rect(r.x + 20, y, 260, 34), "New world: starter town")) { Game.NewWorld(true); Open = Panel.None; }
             y += 42;
             if (Button(new Rect(r.x + 20, y, 260, 34), "New world: empty")) { Game.NewWorld(false); Open = Panel.None; }
+            y += 42;
+            if (Button(new Rect(r.x + 20, y, 260, 34), TextureAtlas.PixelArt ? "Textures: pixel-crisp" : "Textures: smooth")) TextureAtlas.PixelArt = !TextureAtlas.PixelArt;
             y += 42;
             if (Button(new Rect(r.x + 20, y, 260, 34), "Controls  (F1)")) Open = Panel.Help;
             y += 42;
@@ -316,9 +325,9 @@ namespace UKCity.UI
                 "<b>City planner (2D)</b>\n" +
                 "WASD / arrows  pan   Scroll  zoom\n" +
                 "Middle / right drag  pan\n" +
-                "1 Select   2 Road   3 Roundabout\n" +
-                "4 Zebra crossing   5 Building\n" +
-                "6 Bulldoze\n\n" +
+                "1 Select  2 Road  3 Roundabout\n" +
+                "4 Crossing  5 Signals  6 Sign\n" +
+                "7 Building  8 Bulldoze\n\n" +
                 "Road: click to start, click to add\n" +
                 "points, right click to finish.\n" +
                 "Shift snaps to 15 degree angles.\n" +
@@ -339,12 +348,12 @@ namespace UKCity.UI
             GUI.Label(new Rect(r.x + 10, r.y + 6, 250, 24), "CITY PLANNER", title);
             GUI.Label(new Rect(r.x + 10, r.y + 28, 250, 18), "Tab: first person   P: walk here   F1: help", small);
 
-            float y = r.y + 52;
-            string[] names = { "1  Select / Move", "2  Draw Road", "3  Roundabout", "4  Zebra Crossing", "5  Place Building", "6  Bulldoze" };
+            float y = r.y + 48;
+            string[] names = { "1  Select / Move", "2  Draw Road", "3  Roundabout", "4  Crossing", "5  Traffic Signals", "6  Road Sign", "7  Place Building", "8  Bulldoze" };
             for (int i = 0; i < names.Length; i++)
             {
-                if (Button(new Rect(r.x + 10, y, 250, 26), names[i], (int)pl.Tool == i)) pl.SetTool((PlannerTool)i);
-                y += 29;
+                if (Button(new Rect(r.x + 10, y, 250, 24), names[i], (int)pl.Tool == i)) pl.SetTool((PlannerTool)i);
+                y += 26;
             }
             y += 6;
             Fill(new Rect(r.x + 10, y, 250, 1), new Color(1, 1, 1, 0.2f));
@@ -356,8 +365,14 @@ namespace UKCity.UI
                 case PlannerTool.Road: RoadOptions(opts); break;
                 case PlannerTool.Roundabout: RoundaboutOptions(opts); break;
                 case PlannerTool.Crossing:
-                    GUI.Label(opts, "Click a road with pavements to add a zebra crossing. Belisha beacons are added automatically. Click an existing crossing to remove it.", label);
+                    if (Button(new Rect(opts.x, opts.y, opts.width, 24), "Zebra (Belisha beacons)", pl.NewCrossingKind == CrossingKind.Zebra)) pl.NewCrossingKind = CrossingKind.Zebra;
+                    if (Button(new Rect(opts.x, opts.y + 26, opts.width, 24), "Puffin (signal controlled)", pl.NewCrossingKind == CrossingKind.Signal)) pl.NewCrossingKind = CrossingKind.Signal;
+                    GUI.Label(new Rect(opts.x, opts.y + 58, opts.width, 120), "Click a road with pavements to add a crossing, with zig-zags, tactile paving and beacons or signals. Click an existing crossing to switch its type. Bulldoze removes it.", small);
                     break;
+                case PlannerTool.Signals:
+                    GUI.Label(opts, "Click a junction (3+ roads) to add or remove traffic lights. You get stop lines, lane arrows, a pedestrian stage with crossings, and signal heads that cycle red, red+amber, green, amber.\n\nShift+click toggles a yellow box junction.", label);
+                    break;
+                case PlannerTool.Sign: SignOptions(opts); break;
                 case PlannerTool.Building: BuildingOptions(opts); break;
                 case PlannerTool.Select: SelectOptions(opts); break;
                 case PlannerTool.Bulldoze:
@@ -426,8 +441,31 @@ namespace UKCity.UI
             var pl = Game.Planner;
             pl.AutoOrient = GUI.Toggle(new Rect(r.x, r.y, r.width, 20), pl.AutoOrient, " Face nearest road");
             GUI.Label(new Rect(r.x, r.y + 22, r.width, 20), "R rotates. Click to place.", small);
-            string picked = TemplateList(new Rect(r.x - 4, r.y + 46, r.width + 8, r.height - 46), ref plannerScroll, pl.TemplateId);
+            string picked = TemplateList(new Rect(r.x - 4, r.y + 46, r.width + 8, r.height - 46), ref plannerScroll, pl.TemplateId, t => !t.IsSign);
             if (picked != null) pl.TemplateId = picked;
+        }
+
+        private void SignOptions(Rect r)
+        {
+            var pl = Game.Planner;
+            GUI.Label(new Rect(r.x, r.y, r.width, 40), "Click beside a road: the sign stands at the kerb facing oncoming traffic. R rotates.", small);
+            var t = BuildingLibrary.Get(pl.SignTemplateId);
+            GUI.Label(new Rect(r.x, r.y + 38, r.width, 20), t?.Name ?? "", label);
+            var view = new Rect(r.x - 4, r.y + 62, r.width + 8, r.height - 62);
+            const int cell = 46;
+            int perRow = 5;
+            var signs = new List<BuildingTemplate>();
+            foreach (var bt in BuildingLibrary.All) if (bt.IsSign) signs.Add(bt);
+            signScroll = GUI.BeginScrollView(view, signScroll, new Rect(0, 0, view.width - 20, Mathf.Ceil(signs.Count / (float)perRow) * cell));
+            for (int i = 0; i < signs.Count; i++)
+            {
+                var cr = new Rect((i % perRow) * cell, (i / perRow) * cell, cell - 4, cell - 4);
+                Fill(cr, signs[i].Id == pl.SignTemplateId ? new Color(0.85f, 0.65f, 0.1f) : new Color(0.22f, 0.22f, 0.25f));
+                TileIcon(new Rect(cr.x + 3, cr.y + 3, cr.width - 6, cr.height - 6), signs[i].IconTile);
+                if (GUI.Button(cr, new GUIContent("", signs[i].Name), GUIStyle.none)) pl.SignTemplateId = signs[i].Id;
+            }
+            GUI.EndScrollView();
+            if (!string.IsNullOrEmpty(GUI.tooltip)) GUI.Label(new Rect(r.x, r.y + 38, r.width, 20), GUI.tooltip, label);
         }
 
         private void SelectOptions(Rect r)
@@ -457,6 +495,13 @@ namespace UKCity.UI
                 }
                 else if (Button(new Rect(r.x, y, r.width, 26), "Make roundabout")) city.SetRoundabout(node.Id, pl.RoundaboutRadius);
                 y += 30;
+                if (!node.IsRoundabout && node.Segments.Count >= 3)
+                {
+                    if (Button(new Rect(r.x, y, r.width, 26), node.Signals ? "Remove traffic lights" : "Add traffic lights")) city.SetSignals(node.Id, !node.Signals);
+                    y += 30;
+                    if (node.Signals && Button(new Rect(r.x, y, r.width, 26), node.YellowBox ? "Remove yellow box" : "Add yellow box")) city.SetYellowBox(node.Id, !node.YellowBox);
+                    y += 30;
+                }
                 if (Button(new Rect(r.x, y, r.width, 26), "Delete junction  (Del)")) pl.DeleteSelection();
             }
             else if (pl.SelectedBuilding != 0 && city.Buildings.TryGetValue(pl.SelectedBuilding, out var b))

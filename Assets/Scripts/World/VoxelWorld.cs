@@ -12,7 +12,7 @@ namespace UKCity.World
     {
         public ChunkCoord Coord;
         /// <summary>Null until the first generation finishes.</summary>
-        public byte[] Blocks;
+        public ushort[] Blocks;
         public bool NeedsRegen = true;
         public int GenRequest;
         public int EditVersion;
@@ -33,6 +33,8 @@ namespace UKCity.World
         public int Seed = 1066;
         public CityLayer City { get; private set; }
         public readonly WorldEdits Edits = new WorldEdits();
+        /// <summary>Receives each chunk's animated blocks (signals, message signs...).</summary>
+        public DynamicFaces Animated;
 
         private readonly Dictionary<ChunkCoord, Chunk> chunks = new Dictionary<ChunkCoord, Chunk>();
         private readonly ConcurrentQueue<GenResult> genResults = new ConcurrentQueue<GenResult>();
@@ -57,7 +59,7 @@ namespace UKCity.World
             public Chunk Chunk;
             public int Request;
             public int EditVersion;
-            public byte[] Data;
+            public ushort[] Data;
             public Exception Error;
         }
 
@@ -78,6 +80,7 @@ namespace UKCity.World
 
             opaqueMat = MakeMaterial("UKCity/Voxel");
             transparentMat = MakeMaterial("UKCity/VoxelTransparent");
+            if (Animated != null) Animated.Material = opaqueMat;
 
             if (sortedOffsets == null)
             {
@@ -97,7 +100,9 @@ namespace UKCity.World
                 Debug.LogError($"Shader '{shaderName}' not found. Check Assets/Resources/Shaders.");
                 shader = Shader.Find("Unlit/Texture");
             }
-            return new Material(shader) { mainTexture = TextureAtlas.Texture };
+            var m = new Material(shader);
+            m.SetTexture("_Tiles", TextureAtlas.Array);
+            return m;
         }
 
         private void OnDestroy()
@@ -113,7 +118,7 @@ namespace UKCity.World
             radius = Mathf.Clamp(chunkRadius, 2, MaxRadius);
         }
 
-        public byte GetBlock(int x, int y, int z)
+        public ushort GetBlock(int x, int y, int z)
         {
             if (y < 0) return BlockIds.Bedrock;
             if (y >= WorldConst.ChunkHeight) return BlockIds.Air;
@@ -134,14 +139,14 @@ namespace UKCity.World
             if (!IsLoaded(x, z)) return -1;
             for (int y = WorldConst.ChunkHeight - 1; y >= 0; y--)
             {
-                byte b = GetBlock(x, y, z);
+                ushort b = GetBlock(x, y, z);
                 if (b != BlockIds.Air && Blocks.IsSolidForPhysics(b)) return y;
             }
             return 0;
         }
 
         /// <summary>Player edit: changes a block, records it and remeshes immediately.</summary>
-        public bool SetBlock(int x, int y, int z, byte id)
+        public bool SetBlock(int x, int y, int z, ushort id)
         {
             if (y < 1 || y >= WorldConst.ChunkHeight) return false;
             var cc = ChunkCoord.FromBlock(x, z);
@@ -180,6 +185,7 @@ namespace UKCity.World
         {
             foreach (var c in chunks.Values) DestroyChunk(c);
             chunks.Clear();
+            Animated?.Clear();
         }
 
         private void Invalidate(Chunk c)
@@ -241,9 +247,9 @@ namespace UKCity.World
             return true;
         }
 
-        private byte[][] GatherNeighbours(ChunkCoord cc)
+        private ushort[][] GatherNeighbours(ChunkCoord cc)
         {
-            var arr = new byte[9][];
+            var arr = new ushort[9][];
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)
                     arr[(dx + 1) + (dz + 1) * 3] = chunks[new ChunkCoord(cc.X + dx, cc.Z + dz)].Blocks;
@@ -284,7 +290,7 @@ namespace UKCity.World
                 try
                 {
                     var padded = PaddedChunk.Build(neighbours, out int maxY);
-                    ChunkMesher.Build(ref padded, 16, Mathf.Min(maxY + 2, WorldConst.ChunkHeight), 16, md);
+                    ChunkMesher.Build(ref padded, 16, Mathf.Min(maxY + 2, WorldConst.ChunkHeight), 16, md, c.Coord.MinX, 0, c.Coord.MinZ);
                 }
                 catch (Exception e) { r.Error = e; }
                 meshResults.Enqueue(r);
@@ -335,7 +341,7 @@ namespace UKCity.World
             c.MeshRequest++;
             c.NeedsMesh = false;
             var padded = PaddedChunk.Build(GatherNeighbours(c.Coord), out int maxY);
-            ChunkMesher.Build(ref padded, 16, Mathf.Min(maxY + 2, WorldConst.ChunkHeight), 16, mainThreadMesh);
+            ChunkMesher.Build(ref padded, 16, Mathf.Min(maxY + 2, WorldConst.ChunkHeight), 16, mainThreadMesh, c.Coord.MinX, 0, c.Coord.MinZ);
             Upload(c, mainThreadMesh);
         }
 
@@ -355,6 +361,7 @@ namespace UKCity.World
                 mr.receiveShadows = false;
             }
             md.ApplyTo(c.Mesh);
+            Animated?.SetChunk(c.Coord, md.Animated);
         }
 
         private void UnloadFar()
@@ -371,6 +378,7 @@ namespace UKCity.World
             {
                 DestroyChunk(c);
                 chunks.Remove(c.Coord);
+                Animated?.Remove(c.Coord);
             }
         }
 

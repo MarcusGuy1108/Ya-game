@@ -3,7 +3,7 @@ Shader "UKCity/Ghost"
 {
     Properties
     {
-        _MainTex ("Atlas", 2D) = "white" {}
+        _Tiles ("Block Tiles", 2DArray) = "" {}
         _Color ("Tint", Color) = (0.6, 1, 0.6, 0.55)
     }
     SubShader
@@ -18,13 +18,14 @@ Shader "UKCity/Ghost"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma require 2darray
             #include "UnityCG.cginc"
 
-            sampler2D _MainTex;
+            UNITY_DECLARE_TEX2DARRAY(_Tiles);
             fixed4 _Color;
 
-            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; float4 color : COLOR; };
-            struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 color : COLOR; };
+            struct appdata { float4 vertex : POSITION; float3 uv : TEXCOORD0; float4 color : COLOR; };
+            struct v2f { float4 pos : SV_POSITION; float3 uv : TEXCOORD0; float4 color : COLOR; };
 
             v2f vert (appdata v)
             {
@@ -37,7 +38,7 @@ Shader "UKCity/Ghost"
 
             fixed4 frag (v2f i) : SV_Target
             {
-                fixed4 c = tex2D(_MainTex, i.uv);
+                fixed4 c = UNITY_SAMPLE_TEX2DARRAY(_Tiles, i.uv);
                 clip(c.a - 0.1);
                 c.rgb = c.rgb * i.color.rgb * _Color.rgb;
                 c.a = _Color.a;

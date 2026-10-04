@@ -6,7 +6,7 @@ using UKCity.World;
 
 namespace UKCity.Planner
 {
-    public enum PlannerTool { Select, Road, Roundabout, Crossing, Building, Bulldoze }
+    public enum PlannerTool { Select, Road, Roundabout, Crossing, Signals, Sign, Building, Bulldoze }
 
     /// <summary>
     /// The top-down 2D city planner. An orthographic camera looks straight down at the same voxel world
@@ -22,6 +22,8 @@ namespace UKCity.Planner
         public int RoadTypeId;
         public float RoundaboutRadius = 10f;
         public string TemplateId = "terrace_row";
+        public string SignTemplateId = "sign_limit_30";
+        public CrossingKind NewCrossingKind = CrossingKind.Zebra;
         public int TemplateRotOffset;
         public bool AutoOrient = true;
         public bool ShowGrid;
@@ -97,17 +99,13 @@ namespace UKCity.Planner
             MouseWorld = new Vector2(ray.origin.x, ray.origin.z);
             UpdateHover();
 
-            if (GameInput.KeyDown(KeyCode.Alpha1)) SetTool(PlannerTool.Select);
-            if (GameInput.KeyDown(KeyCode.Alpha2)) SetTool(PlannerTool.Road);
-            if (GameInput.KeyDown(KeyCode.Alpha3)) SetTool(PlannerTool.Roundabout);
-            if (GameInput.KeyDown(KeyCode.Alpha4)) SetTool(PlannerTool.Crossing);
-            if (GameInput.KeyDown(KeyCode.Alpha5)) SetTool(PlannerTool.Building);
-            if (GameInput.KeyDown(KeyCode.Alpha6)) SetTool(PlannerTool.Bulldoze);
+            int digit = GameInput.DigitDown();
+            if (digit >= 0 && digit < 8) SetTool((PlannerTool)digit);
             if (GameInput.KeyDown(KeyCode.G)) ShowGrid = !ShowGrid;
             if (GameInput.KeyDown(KeyCode.H)) ShowOverlay = !ShowOverlay;
             if (GameInput.KeyDown(KeyCode.R))
             {
-                if (Tool == PlannerTool.Building) TemplateRotOffset = (TemplateRotOffset + 1) & 3;
+                if (Tool == PlannerTool.Building || Tool == PlannerTool.Sign) TemplateRotOffset = (TemplateRotOffset + 1) & 3;
                 else if (Tool == PlannerTool.Road) RoadTypeId = (RoadTypeId + 1) % RoadTypes.All.Count;
             }
             if (GameInput.KeyDown(KeyCode.Delete) || GameInput.KeyDown(KeyCode.Backspace)) DeleteSelection();
@@ -121,6 +119,8 @@ namespace UKCity.Planner
                 case PlannerTool.Road: RoadTool(); break;
                 case PlannerTool.Roundabout: RoundaboutTool(); break;
                 case PlannerTool.Crossing: CrossingTool(); break;
+                case PlannerTool.Signals: SignalsTool(); break;
+                case PlannerTool.Sign: SignTool(); break;
                 case PlannerTool.Building: BuildingTool(); break;
                 case PlannerTool.Bulldoze: BulldozeTool(); break;
             }
@@ -176,8 +176,8 @@ namespace UKCity.Planner
             hoverCrossing = false;
             if (s != null)
             {
-                foreach (float c in s.Crossings)
-                    if (Vector2.Distance(city.CrossingPos(s, c), MouseWorld) < 2.5f) hoverCrossing = true;
+                foreach (var c in s.Crossings)
+                    if (Vector2.Distance(city.CrossingPos(s, c.T), MouseWorld) < 2.5f) hoverCrossing = true;
             }
         }
 
@@ -295,15 +295,51 @@ namespace UKCity.Planner
         {
             if (!GameInput.MouseDown(0)) return;
             var city = Game.City;
-            if (city.RemoveCrossingNear(MouseWorld, 2.5f)) return;
+            if (city.FindCrossing(MouseWorld, 2.5f, out int sid, out int idx)) { city.ToggleCrossingKind(sid, idx); return; }
             var s = city.FindSegment(MouseWorld, 0.5f, out float t);
             if (s == null) return;
             if (!s.RoadType.HasPavement)
             {
-                Game.Toast("Zebra crossings need a road with pavements.");
+                Game.Toast("Crossings need a road with pavements.");
                 return;
             }
-            city.AddCrossing(s.Id, t);
+            city.AddCrossing(s.Id, t, NewCrossingKind);
+        }
+
+        private void SignalsTool()
+        {
+            if (!GameInput.MouseDown(0)) return;
+            var city = Game.City;
+            var n = city.FindNode(MouseWorld, HoverRadius * 2f);
+            if (n == null || n.IsRoundabout || n.Segments.Count < 3)
+            {
+                Game.Toast("Click a junction where three or more roads meet.");
+                return;
+            }
+            if (GameInput.Shift)
+            {
+                if (!n.Signals) city.SetSignals(n.Id, true);
+                city.SetYellowBox(n.Id, !n.YellowBox);
+            }
+            else city.SetSignals(n.Id, !n.Signals);
+        }
+
+        // ------------------------------------------------------------------ signs
+
+        public SignPlacement PlaceSign(BuildingTemplate t)
+        {
+            var sp = SignPlacer.Place(Game.City, t, MouseWorld);
+            sp.Rotation = (sp.Rotation + TemplateRotOffset) & 3;
+            return sp;
+        }
+
+        private void SignTool()
+        {
+            if (!GameInput.MouseDown(0)) return;
+            var t = BuildingLibrary.Get(SignTemplateId);
+            if (t == null) return;
+            var sp = PlaceSign(t);
+            Game.PlaceBuilding(SignTemplateId, sp.Origin, sp.Rotation);
         }
 
         public int BuildingRotation(BuildingTemplate t, Vector3Int origin)
@@ -414,8 +450,8 @@ namespace UKCity.Planner
                     if (hl) col = Tool == PlannerTool.Bulldoze ? new Color(1, 0.2f, 0.2f) : Color.yellow;
                     col.a = hl ? 0.9f : 0.55f;
                     lines.Strip(a, b, hl ? w * 2.5f : w, y, col);
-                    foreach (float c in s.Crossings)
-                        lines.Disc(city.CrossingPos(s, c), w * 3f, y, new Color(1, 1, 1, 0.8f), 8);
+                    foreach (var c in s.Crossings)
+                        lines.Disc(city.CrossingPos(s, c.T), w * 3f, y, c.Kind == CrossingKind.Zebra ? new Color(1, 1, 1, 0.8f) : new Color(1, 0.5f, 0.3f, 0.9f), 8);
                 }
                 foreach (var n in city.Nodes.Values)
                 {
@@ -424,6 +460,7 @@ namespace UKCity.Planner
                     if (hl) col = Tool == PlannerTool.Bulldoze ? new Color(1, 0.2f, 0.2f) : Color.yellow;
                     lines.Disc(n.Pos, (hl ? 2.2f : 1.4f) * w, y, col, 10);
                     if (n.IsRoundabout) lines.Circle(n.Pos, n.RoundaboutRadius, y, new Color(1, 1, 1, 0.6f));
+                    if (n.Signals) lines.Circle(n.Pos, 5f, y, new Color(1f, 0.35f, 0.3f, 0.8f));
                 }
             }
 
@@ -482,6 +519,26 @@ namespace UKCity.Planner
                         var p = Vector2.Lerp(city.Nodes[s.A].Pos, city.Nodes[s.B].Pos, t);
                         lines.Disc(p, 1.5f, y, hoverCrossing ? new Color(1, 0.3f, 0.3f, 0.7f) : new Color(1, 1, 1, 0.7f), 12);
                     }
+                    break;
+                }
+                case PlannerTool.Sign:
+                {
+                    var t = BuildingLibrary.Get(SignTemplateId);
+                    if (t == null) break;
+                    var sp = PlaceSign(t);
+                    var fp = t.Footprint(sp.Origin, sp.Rotation);
+                    lines.Rect(fp, y, Color.cyan);
+                    var fd = BuildingTemplate.FrontDirection(sp.Rotation);
+                    var c = new Vector2((fp.xMin + fp.xMax) * 0.5f, (fp.yMin + fp.yMax) * 0.5f);
+                    lines.Strip(c, c + new Vector2(fd.x, fd.y) * 4f, w, y, Color.yellow);
+                    Game.Interactor.DrawGhost(t, sp.Origin, sp.Rotation, Cam, true);
+                    break;
+                }
+                case PlannerTool.Signals:
+                {
+                    var n = city.FindNode(MouseWorld, HoverRadius * 2f);
+                    if (n != null && n.Segments.Count >= 3 && !n.IsRoundabout)
+                        lines.Circle(n.Pos, 6f, y, n.Signals ? new Color(1, 0.3f, 0.3f) : new Color(0.3f, 1, 0.4f));
                     break;
                 }
                 case PlannerTool.Building:
